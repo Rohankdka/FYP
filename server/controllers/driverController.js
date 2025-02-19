@@ -173,7 +173,7 @@ const transporter = nodemailer.createTransport({
 
 export const updateDriverVerification = async (req, res) => {
     const { driverId } = req.params;
-    const { status, rejectionReason } = req.body; // status: "approved" or "rejected"
+    const { isVerified } = req.body;
 
     try {
         const driver = await DriverModel.findById(driverId);
@@ -181,8 +181,7 @@ export const updateDriverVerification = async (req, res) => {
             return res.status(404).json({ message: 'Driver not found.' });
         }
 
-        // Update driver status
-        driver.status = status;
+        driver.isVerified = isVerified;
         await driver.save();
 
         // Send email notification
@@ -190,9 +189,7 @@ export const updateDriverVerification = async (req, res) => {
             from: process.env.EMAIL,
             to: driver.email,
             subject: 'Driver Verification Status',
-            text: `Your driver application has been ${status}. ${
-                status === 'rejected' ? `Reason: ${rejectionReason}` : ''
-            }`,
+            text: `Dear ${driver.fullName},\n\nYour driver application has been ${isVerified ? 'accepted' : 'rejected'}.\n\nThank you for your application.\n\nBest regards,\nThe Team`,
         };
 
         transporter.sendMail(mailOptions, (error, info) => {
@@ -204,7 +201,7 @@ export const updateDriverVerification = async (req, res) => {
         });
 
         return res.status(200).json({
-            message: `Driver ${status} successfully.`,
+            message: `Driver ${isVerified ? 'accepted' : 'rejected'} successfully.`,
             driver,
         });
     } catch (error) {

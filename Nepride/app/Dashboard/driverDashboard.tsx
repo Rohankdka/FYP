@@ -9,14 +9,24 @@ const DriverDashboard = () => {
   const router = useRouter();
 
   useEffect(() => {
-    if (user?.role === "driver" && user?.status !== "approved") {
-      router.push("/Dashboard/pendingApproval"); // Redirect to pending approval screen
+    if (user?.role === "driver") {
+      if (user?.status === "pending") {
+        router.push("/Dashboard/pendingApproval"); // Redirect to pending approval screen
+      } else if (user?.status === "approved") {
+        // Optionally, you can handle the approved state here
+        console.log("Driver approved, show dashboard content.");
+      } else if (user?.status === "rejected") {
+        // Handle rejected state, e.g., show a message or redirect
+        console.log("Driver application rejected.");
+        // You can redirect to a different screen or show a message
+      }
     }
   }, [user]);
 
   return (
     <View>
       <Text>Welcome to the Driver Dashboard!</Text>
+      {/* Additional dashboard content can go here */}
     </View>
   );
 };

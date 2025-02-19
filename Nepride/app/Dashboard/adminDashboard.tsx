@@ -31,7 +31,6 @@ interface Driver {
   vehicleDetailPhoto?: string;
   renewalDetailPhoto?: string;
   ownerDetailPhoto?: string;
-  // Add any other fields from your driver form
 }
 
 interface ImageViewerProps {
@@ -142,12 +141,7 @@ const DriverCard: React.FC<DriverCardProps> = ({
   };
 
   return (
-    <View
-      style={[
-        styles.driverCard,
-        driver.status !== "pending" && styles.processedCard,
-      ]}
-    >
+    <View style={styles.driverCard}>
       <View style={styles.driverHeader}>
         <View style={styles.driverInfo}>
           <Text style={styles.driverName}>{driver.fullName}</Text>
@@ -168,16 +162,7 @@ const DriverCard: React.FC<DriverCardProps> = ({
               : styles.pendingBadge,
           ]}
         >
-          <Text
-            style={[
-              styles.statusText,
-              driver.status === "approved"
-                ? styles.acceptedText
-                : driver.status === "rejected"
-                ? styles.rejectedText
-                : styles.pendingText,
-            ]}
-          >
+          <Text style={styles.statusText}>
             {driver.status.charAt(0).toUpperCase() + driver.status.slice(1)}
           </Text>
         </View>
@@ -269,7 +254,8 @@ const AdminDashboard: React.FC = () => {
 
   const fetchDrivers = async () => {
     try {
-      const response = await axios.get(`${API_BASE_URL}/admin/pending-driver`);
+      // Fetch all drivers, not just pending ones
+      const response = await axios.get(`${API_BASE_URL}/driver/drivers`); // Update this endpoint to fetch all drivers
       setDrivers(response.data);
     } catch (error) {
       Alert.alert("Error", "Failed to fetch drivers.");
@@ -289,16 +275,8 @@ const AdminDashboard: React.FC = () => {
         status,
       });
 
-      setDrivers((prevDrivers) =>
-        prevDrivers.map((driver) =>
-          driver._id === driverId
-            ? {
-                ...driver,
-                status,
-              }
-            : driver
-        )
-      );
+      // After approval, fetch the updated list of drivers
+      fetchDrivers();
 
       Alert.alert("Success", `Driver ${status} successfully.`);
     } catch (error) {
@@ -321,7 +299,7 @@ const AdminDashboard: React.FC = () => {
   }
 
   const pendingDrivers = drivers.filter((d) => d.status === "pending");
-  const processedDrivers = drivers.filter((d) => d.status !== "pending");
+  const approvedDrivers = drivers.filter((d) => d.status === "approved");
 
   return (
     <SafeAreaView style={styles.container}>
@@ -344,9 +322,9 @@ const AdminDashboard: React.FC = () => {
 
         <View style={styles.sectionContainer}>
           <Text style={styles.sectionHeader}>
-            Recently Processed ({processedDrivers.length})
+            Approved Drivers ({approvedDrivers.length})
           </Text>
-          {processedDrivers.map((driver) => (
+          {approvedDrivers.map((driver) => (
             <DriverCard
               key={driver._id}
               driver={driver}
@@ -440,15 +418,6 @@ const styles = StyleSheet.create({
   statusText: {
     fontSize: 12,
     fontWeight: "600",
-  },
-  pendingText: {
-    color: "#f57c00",
-  },
-  acceptedText: {
-    color: "#34a853",
-  },
-  rejectedText: {
-    color: "#ea4335",
   },
   documentsButton: {
     marginTop: 12,
@@ -548,9 +517,6 @@ const styles = StyleSheet.create({
   modalImage: {
     width: "100%",
     height: "100%",
-  },
-  processedCard: {
-    opacity: 0.8,
   },
 });
 
