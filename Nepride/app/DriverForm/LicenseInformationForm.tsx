@@ -110,10 +110,7 @@ const LicenseInformationForm = () => {
 
       Alert.alert("Success", response.data.message);
       Alert.alert("Success", response.data.message);
-      router.replace({
-        pathname: "/auth/login",
-        params: { driverId },
-      });
+      router.replace("/auth/login");
     } catch (error) {
       const message = axios.isAxiosError(error)
         ? error.response?.data.message ?? "Failed to save information"
