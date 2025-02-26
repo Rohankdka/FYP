@@ -16,7 +16,7 @@ import axios from "axios";
 
 const { width } = Dimensions.get("window");
 const THUMBNAIL_SIZE = (width - 80) / 4;
-const API_BASE_URL = "http://localhost:3001"; // Update this with your API URL
+const API_BASE_URL = "http://192.168.1.70:3001"; // Update this with your API URL
 
 interface Driver {
   _id: string;

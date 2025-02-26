@@ -42,10 +42,10 @@ const LoginScreen = () => {
 
   const handleLogin = async () => {
     if (!validateForm()) return;
-
+  
     setIsLoggingIn(true);
     try {
-      await login(email, password);
+      await login(email, password); // This will handle navigation with the `id`
     } catch (error) {
       Alert.alert("Error", "Login failed");
     } finally {

@@ -79,7 +79,7 @@ const PhoneVerificationScreen = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:3001/auth/verifyphoneotp",
+        "http://192.168.1.70:3001/auth/verifyphoneotp",
         { phone, otp }
       );
       console.log("Response:", response.data);

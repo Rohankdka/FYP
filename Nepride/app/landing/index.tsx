@@ -31,17 +31,19 @@ export default function Landing() {
       </Text>
 
       {/* Use Link to navigate to /register */}
-      <Link href="/auth/sendPhoneOtp">
-        <TouchableOpacity
-          style={{
-            backgroundColor: "#3b82f6",
-            paddingVertical: 16,
-            paddingHorizontal: 32,
-            borderRadius: 8,
-          }}
-        >
-          <Text style={{ color: "white", fontSize: 18 }}>Get Started</Text>
-        </TouchableOpacity>
+      <Link
+        href="/auth/sendPhoneOtp"
+        style={{
+          backgroundColor: "#3b82f6",
+          paddingVertical: 16,
+          paddingHorizontal: 32,
+          borderRadius: 8,
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+        }}
+      >
+        <Text style={{ color: "white", fontSize: 18 }}>Get Started</Text>
       </Link>
     </View>
   );

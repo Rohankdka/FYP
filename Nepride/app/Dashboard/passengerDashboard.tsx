@@ -1,85 +1,255 @@
-import React from "react";
-import { View, Text, StyleSheet, SafeAreaView, ScrollView } from "react-native";
-import { useRouter } from "expo-router";
-import { useAuth } from "../context/authContext";
+import React, { useEffect, useState } from "react";
+import { View, Text, Button, ActivityIndicator, TextInput, StyleSheet, ScrollView } from "react-native";
+import MapView, { Marker } from "react-native-maps";
+import * as Location from "expo-location";
+import io from "socket.io-client";
+import { useLocalSearchParams } from "expo-router";
+import axios from "axios"; // For making API requests
 
-export default function PassengerDashboard() {
-  const router = useRouter();
-  const { user } = useAuth();
+interface Ride {
+  _id: string;
+  driverId: string;
+  passengerId: string;
+  pickupLocation: string; // Coordinates (latitude,longitude)
+  dropoffLocation: string; // Coordinates (latitude,longitude)
+  pickupLocationName: string; // Human-readable name (e.g., "Baneshwor")
+  dropoffLocationName: string; // Human-readable name (e.g., "Koteshwor")
+  status: string;
+}
 
-  if (!user) {
-    return <Text>Please log in to access the dashboard.</Text>;
-  }
+const PassengerDashboard = () => {
+  const { passengerId } = useLocalSearchParams<{ passengerId: string }>();
+  const [currentLocation, setCurrentLocation] = useState<Location.LocationObject | null>(null);
+  const [pickupLocationName, setPickupLocationName] = useState("");
+  const [dropoffLocationName, setDropoffLocationName] = useState("");
+  const [pickupLocationCoords, setPickupLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [dropoffLocationCoords, setDropoffLocationCoords] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [activeRide, setActiveRide] = useState<Ride | null>(null);
+  const [rideHistory, setRideHistory] = useState<Ride[]>([]);
+  const [isLoading, setIsLoading] = useState(false);
+  const socket = io("http://192.168.1.70:3001");
+
+  // Get the passenger's current location
+  useEffect(() => {
+    (async () => {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+      if (status !== "granted") {
+        console.error("Permission to access location was denied");
+        return;
+      }
+
+      const location = await Location.getCurrentPositionAsync({});
+      setCurrentLocation(location);
+      setPickupLocationCoords({
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      });
+    })();
+  }, []);
+
+  // Geocode location name to coordinates
+  const geocodeLocation = async (locationName: string) => {
+    try {
+      const response = await axios.get(
+        `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(locationName)}&key=AIzaSyAfVD-fFk1aa4yy4YFesrLIXhxwNHhQtxU`
+      );
+      if (response.data.results.length > 0) {
+        const { lat, lng } = response.data.results[0].geometry.location;
+        return { latitude: lat, longitude: lng };
+      } else {
+        throw new Error("Location not found");
+      }
+    } catch (error) {
+      console.error("❌ Error geocoding location:", error);
+      return null;
+    }
+  };
+
+  // Handle requesting a ride
+  const handleRequestRide = async () => {
+    if (!pickupLocationName || !dropoffLocationName) {
+      alert("Please enter pickup and dropoff locations.");
+      return;
+    }
+
+    setIsLoading(true);
+
+    try {
+      // Geocode pickup and dropoff locations
+      const pickupCoords = await geocodeLocation(pickupLocationName);
+      const dropoffCoords = await geocodeLocation(dropoffLocationName);
+
+      if (!pickupCoords || !dropoffCoords) {
+        alert("Invalid pickup or dropoff location.");
+        return;
+      }
+
+      // Set coordinates for map display
+      setPickupLocationCoords(pickupCoords);
+      setDropoffLocationCoords(dropoffCoords);
+
+      // Emit ride request to the server
+      const ride = {
+        passengerId,
+        pickupLocation: `${pickupCoords.latitude},${pickupCoords.longitude}`,
+        dropoffLocation: `${dropoffCoords.latitude},${dropoffCoords.longitude}`,
+        pickupLocationName,
+        dropoffLocationName,
+      };
+
+      socket.emit("request-ride", ride);
+      console.log("🚕 Ride requested:", ride);
+    } catch (error) {
+      console.error("❌ Error requesting ride:", error);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Handle canceling a ride
+  const handleCancelRide = () => {
+    if (activeRide) {
+      socket.emit("ride-status-update", { rideId: activeRide._id, status: "canceled" });
+      setActiveRide(null);
+    }
+  };
+
+  // Listen for ride status updates
+  useEffect(() => {
+    socket.on("ride-status", (data: { rideId: string; status: string }) => {
+      if (activeRide && activeRide._id === data.rideId) {
+        setActiveRide((prev) => (prev ? { ...prev, status: data.status } : null));
+      }
+    });
+
+    return () => {
+      socket.disconnect();
+    };
+  }, [activeRide]);
 
   return (
-    <SafeAreaView style={styles.container}>
-      <ScrollView contentContainerStyle={styles.scrollContainer}>
-        <Text style={styles.title}>Passenger Dashboard</Text>
-        <Text style={styles.subtitle}>Welcome, Passenger!</Text>
+    <View style={styles.container}>
+      {/* Map Section */}
+      <MapView
+        style={styles.map}
+        initialRegion={{
+          latitude: currentLocation?.coords.latitude || 27.7172,
+          longitude: currentLocation?.coords.longitude || 85.324,
+          latitudeDelta: 0.0922,
+          longitudeDelta: 0.0421,
+        }}
+      >
+        {/* Passenger's Current Location Marker */}
+        {currentLocation && (
+          <Marker
+            coordinate={{
+              latitude: currentLocation.coords.latitude,
+              longitude: currentLocation.coords.longitude,
+            }}
+            title="Your Location"
+          />
+        )}
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Book a Ride</Text>
-          <Text style={styles.cardText}>
-            Find and book a ride to your destination.
-          </Text>
-        </View>
+        {/* Pickup and Dropoff Markers */}
+        {pickupLocationCoords && (
+          <Marker coordinate={pickupLocationCoords} title="Pickup Location" />
+        )}
+        {dropoffLocationCoords && (
+          <Marker coordinate={dropoffLocationCoords} title="Dropoff Location" />
+        )}
+      </MapView>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Ride History</Text>
-          <Text style={styles.cardText}>
-            View your past rides and receipts.
-          </Text>
-        </View>
+      {/* Ride Request Form */}
+      <View style={styles.formContainer}>
+        <Text style={styles.heading}>Request a Ride</Text>
+        <TextInput
+          style={styles.input}
+          placeholder="Pickup Location"
+          value={pickupLocationName}
+          onChangeText={setPickupLocationName}
+        />
+        <TextInput
+          style={styles.input}
+          placeholder="Dropoff Location"
+          value={dropoffLocationName}
+          onChangeText={setDropoffLocationName}
+        />
+        <Button
+          title={isLoading ? "Requesting..." : "Request Ride"}
+          onPress={handleRequestRide}
+          disabled={isLoading}
+        />
+      </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>Profile</Text>
-          <Text style={styles.cardText}>
-            Update your profile and payment methods.
-          </Text>
+      {/* Active Ride Section */}
+      {activeRide && (
+        <View style={styles.activeRideContainer}>
+          <Text style={styles.heading}>Active Ride</Text>
+          <Text>Pickup: {activeRide.pickupLocationName}</Text>
+          <Text>Dropoff: {activeRide.dropoffLocationName}</Text>
+          <Text>Status: {activeRide.status}</Text>
+          <Button title="Cancel Ride" onPress={handleCancelRide} />
         </View>
-      </ScrollView>
-    </SafeAreaView>
+      )}
+
+      {/* Ride History Section */}
+      <View style={styles.historyContainer}>
+        <Text style={styles.heading}>Ride History</Text>
+        <ScrollView>
+          {rideHistory.map((ride) => (
+            <View key={ride._id} style={styles.rideCard}>
+              <Text>Pickup: {ride.pickupLocationName}</Text>
+              <Text>Dropoff: {ride.dropoffLocationName}</Text>
+              <Text>Status: {ride.status}</Text>
+            </View>
+          ))}
+        </ScrollView>
+      </View>
+    </View>
   );
-}
+};
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: "#F5F6F8",
+    backgroundColor: "#fff",
   },
-  scrollContainer: {
+  map: {
+    flex: 1,
+  },
+  formContainer: {
     padding: 16,
+    backgroundColor: "#f0f0f0",
   },
-  title: {
-    fontSize: 28,
-    fontWeight: "bold",
-    color: "#333",
-    marginBottom: 8,
-  },
-  subtitle: {
-    fontSize: 16,
-    color: "#666",
-    marginBottom: 24,
-  },
-  card: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 16,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
-    shadowRadius: 4,
-    elevation: 3,
-  },
-  cardTitle: {
+  heading: {
     fontSize: 18,
-    fontWeight: "600",
-    color: "#333",
+    fontWeight: "bold",
     marginBottom: 8,
   },
-  cardText: {
-    fontSize: 14,
-    color: "#666",
+  input: {
+    height: 40,
+    borderColor: "#ccc",
+    borderWidth: 1,
+    borderRadius: 4,
+    paddingHorizontal: 8,
+    marginBottom: 8,
+  },
+  activeRideContainer: {
+    padding: 16,
+    backgroundColor: "#e0f7fa",
+  },
+  historyContainer: {
+    padding: 16,
+    backgroundColor: "#f5f5f5",
+  },
+  rideCard: {
+    padding: 8,
+    marginBottom: 8,
+    backgroundColor: "#fff",
+    borderRadius: 4,
+    borderColor: "#ccc",
+    borderWidth: 1,
   },
 });
+
+export default PassengerDashboard;

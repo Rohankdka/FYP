@@ -130,7 +130,7 @@ const PersonalInformationForm = () => {
     try {
       console.log("Sending request to backend..."); // Debugging: Log request initiation
       const response = await axios.post(
-        "http://localhost:3001/driver/personalinfo",
+        "http://192.168.1.70:3001/driver/personalinfo",
         formData,
         {
           headers: {

@@ -266,9 +266,14 @@ export const loginUser = asyncHandler(async (req, res) => {
     sameSite: "Strict",
   });
 
-  res.status(200).json({ message: "Login successful", token, role: user.role });
+  // Return token, role, and id
+  res.status(200).json({
+    message: "Login successful",
+    token,
+    role: user.role,
+    id: user._id, // Include the user's id in the response
+  });
 });
-
 // Forgot Password (Send OTP)
 export const forgotPassword = asyncHandler(async (req, res) => {
   const { email } = req.body;

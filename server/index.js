@@ -32,24 +32,31 @@ io.on("connection", (socket) => {
     socket.join(`driver-${driverId}`); // Driver joins a specific room
   });
 
+  // 🟢 Handle driver going offline
+  socket.on("driver-offline", (driverId) => {
+    console.log(`🚫 Driver ${driverId} is offline`);
+    socket.leave(`driver-${driverId}`); // Driver leaves their room
+  });
+
   // 🟢 Handle passenger requesting a ride
   socket.on("request-ride", async (data) => {
     console.log("🔍 Received ride request event on server:", data);
 
     try {
       const ride = await Ride.create({
-        driverId: data.driverId,
         passengerId: data.passengerId,
         pickupLocation: data.pickupLocation,
         dropoffLocation: data.dropoffLocation,
-        status: "requested",
+        pickupLocationName: data.pickupLocationName,
+        dropoffLocationName: data.dropoffLocationName,
+        status: "requested", // Default status
       });
 
       console.log("✅ Ride saved in DB:", ride);
 
-      // Notify the driver about the ride request
-      io.to(`driver-${data.driverId}`).emit("ride-request", ride);
-      console.log(`📩 Ride request sent to driver-${data.driverId}`);
+      // Notify all online drivers about the ride request
+      io.emit("ride-request", ride); // Broadcast to all drivers
+      console.log("📩 Ride request broadcasted to all drivers");
     } catch (error) {
       console.error("❌ Error saving ride:", error);
     }
@@ -58,6 +65,34 @@ io.on("connection", (socket) => {
   // 🟢 Handle driver accepting/rejecting a ride
   socket.on("ride-response", async (data) => {
     console.log("🔍 Ride response received:", data);
+
+    try {
+      const ride = await Ride.findById(data.rideId);
+      if (!ride) {
+        console.log("❌ Ride not found");
+        return;
+      }
+
+      // Update ride with driverId and status
+      ride.driverId = data.driverId;
+      ride.status = data.status;
+      await ride.save();
+
+      // Notify the passenger
+      io.to(`passenger-${ride.passengerId}`).emit("ride-status", {
+        rideId: ride._id,
+        status: ride.status,
+      });
+
+      console.log(`📩 Ride status update sent to passenger-${ride.passengerId}`);
+    } catch (error) {
+      console.error("❌ Error updating ride:", error);
+    }
+  });
+
+  // 🟢 Handle ride status updates (e.g., picked up, completed)
+  socket.on("ride-status-update", async (data) => {
+    console.log("🔍 Ride status update received:", data);
 
     try {
       const ride = await Ride.findById(data.rideId);
@@ -77,7 +112,7 @@ io.on("connection", (socket) => {
 
       console.log(`📩 Ride status update sent to passenger-${ride.passengerId}`);
     } catch (error) {
-      console.error("❌ Error updating ride:", error);
+      console.error("❌ Error updating ride status:", error);
     }
   });
 
@@ -91,7 +126,10 @@ app.use("/uploads", express.static("uploads"));
 
 // Middleware
 app.use(express.json());
-app.use(cors({ origin: "http://localhost:8081", credentials: true }));
+app.use(cors({
+  origin: "*", // Allow all origins (or specify frontend URL)
+  credentials: true
+}));
 
 // Database connection
 mongoose
@@ -124,6 +162,6 @@ app.use((err, req, res, next) => {
 
 // Start server
 const PORT = process.env.PORT || 3001;
-server.listen(PORT, () => {
+server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);
 });

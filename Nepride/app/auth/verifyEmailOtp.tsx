@@ -52,7 +52,7 @@ const EmailVerificationScreen = () => {
     try {
       setLoading(true);
       const response = await axios.post(
-        "http://localhost:3001/auth/verify-email",
+        "http://192.168.1.70:3001/auth/verify-email",
         { email, otp }
       );
   
@@ -64,7 +64,7 @@ const EmailVerificationScreen = () => {
             pathname: "/DriverForm/PersonalInformationForm", 
             params: { 
               email,
-              userId: response.data._id  // Make sure this is returned from your backend
+              userId: response.data._id  
             } 
           });
         }

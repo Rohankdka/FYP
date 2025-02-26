@@ -14,7 +14,7 @@ import { useRouter } from "expo-router";
 import { Snackbar, IconButton } from "react-native-paper";
 
 const API_URL =
-  process.env.API_URL || "http://localhost:3001/auth/forgot-password";
+  process.env.API_URL || "http://192.168.1.70:3001/auth/forgot-password";
 
 const ForgotPassword: React.FC = () => {
   const [email, setEmail] = useState<string>("");

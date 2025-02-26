@@ -99,7 +99,7 @@ const LicenseInformationForm = () => {
       }
 
       const response = await axios.post(
-        "http://localhost:3001/driver/licenseinfo",
+        "http://192.168.1.70:3001/driver/licenseinfo",
         formData,
         {
           headers: {

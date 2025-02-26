@@ -205,7 +205,7 @@ const RegistrationScreen = () => {
     try {
       console.log("Sending registration request...");
       const response = await axios.post(
-        "http://localhost:3001/auth/register",
+        "http://192.168.1.70:3001/auth/register",
         { username, email, password, confirmPassword, role },
         {
           headers: { Authorization: `Bearer ${token}` },

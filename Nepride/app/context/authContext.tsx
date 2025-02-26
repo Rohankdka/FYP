@@ -46,7 +46,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Fetch user details using token
   const fetchUser = async (token: string) => {
     try {
-      const response = await axios.get("http://localhost:3001/auth/me", {
+      const response = await axios.get("http://192.168.1.70:3001/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("Fetched user details:", response.data); // Debug log
@@ -60,27 +60,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Handle login
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post("http://localhost:3001/auth/login", {
+      const response = await axios.post("http://192.168.1.70:3001/auth/login", {
         email,
         password,
       });
-      const { token, role } = response.data;
+      const { token, role, id } = response.data; // Destructure token, role, and id
       console.log("Login successful, token:", token); // Debug log
-
+  
       await AsyncStorage.setItem("token", token);
       setToken(token);
       await fetchUser(token);
-
-      // Redirect based on role
+  
+      // Redirect based on role with `id` as a route parameter
       switch (role) {
         case "admin":
           router.push("/Dashboard/adminDashboard");
           break;
         case "driver":
-          router.push("/Dashboard/driverDashboard");
+          router.push(`/Dashboard/driverDashboard?driverId=${id}`); // Pass driverId
           break;
         case "passenger":
-          router.push("/Dashboard/passengerDashboard");
+          router.push(`/Dashboard/passengerDashboard?passengerId=${id}`); // Pass passengerId
           break;
         default:
           router.push("/");
@@ -93,7 +93,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       throw error;
     }
   };
-
   // Handle logout
   const logout = async () => {
     try {

@@ -20,19 +20,19 @@ export const postRide = async (req, res) => {
 
 // Request a ride (Passenger)
 export const requestRide = async (req, res) => {
-  const { passengerId, rideId } = req.body;
+  const { passengerId, pickupLocation, dropoffLocation, pickupLocationName, dropoffLocationName } = req.body;
 
   try {
-    const ride = await Ride.findById(rideId);
-    if (!ride) {
-      return res.status(404).json({ message: "Ride not found" });
-    }
+    const ride = await Ride.create({
+      passengerId,
+      pickupLocation,
+      dropoffLocation,
+      pickupLocationName,
+      dropoffLocationName,
+      status: "requested",
+    });
 
-    ride.passengerId = passengerId;
-    ride.status = "requested";
-    await ride.save();
-
-    res.status(200).json(ride);
+    res.status(201).json(ride);
   } catch (error) {
     res.status(500).json({ message: "Failed to request ride", error: error.message });
   }

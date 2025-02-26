@@ -34,7 +34,11 @@ const DriverSchema = new mongoose.Schema(
     },
 
     // Reference to Nepride model
-    user: { type: mongoose.Schema.Types.ObjectId, ref: "Nepride", required: true },
+    user: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "Nepride",
+      required: true,
+    },
   },
   { timestamps: true }
 );
