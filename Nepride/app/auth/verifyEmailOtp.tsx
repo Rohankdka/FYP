@@ -33,7 +33,9 @@ const EmailVerificationScreen = () => {
   const handleResendOtp = async () => {
     try {
       setLoading(true);
-      await axios.post("http://localhost:3001/auth/resend-email-otp", { email });
+      await axios.post("http://localhost:3001/auth/resend-email-otp", {
+        email,
+      });
       setTimeLeft(30);
       Alert.alert("Success", "New OTP has been sent to your email");
     } catch (error) {
@@ -48,28 +50,30 @@ const EmailVerificationScreen = () => {
       Alert.alert("Error", "Please enter the OTP");
       return;
     }
-  
+
     try {
       setLoading(true);
       const response = await axios.post(
         "http://192.168.1.70:3001/auth/verify-email",
         { email, otp }
       );
-  
+
       if (response.data.message === "Email verified successfully") {
         const userRole = response.data.role;
         if (userRole === "driver") {
           // Pass both email and userId
-          router.push({ 
-            pathname: "/DriverForm/PersonalInformationForm", 
-            params: { 
+          router.push({
+            pathname: "/DriverForm/PersonalInformationForm",
+            params: {
               email,
-              userId: response.data._id  
-            } 
+              userId: response.data._id,
+            },
           });
+        }else if (userRole === "passenger") {
+          // Redirect passenger to login page
+          router.push("/auth/login");
         }
       }
-    
     } catch (error) {
       Alert.alert("Error", "Invalid or expired OTP. Please try again.");
     } finally {

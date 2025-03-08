@@ -44,7 +44,7 @@ const PhoneVerificationScreen = () => {
     setLoading(true);
     try {
       const response = await axios.post(
-        "http://localhost:3001/auth/sendphoneotp",
+        "http://192.168.1.70:3001/auth/sendphoneotp",
         { phone }
       );
       console.log("Response:", response.data);

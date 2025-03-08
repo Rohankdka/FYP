@@ -9,12 +9,30 @@
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSPhotoLibraryUsageDescription": "We need access to your photo library to upload images.",
+        "NSCameraUsageDescription": "We need access to your camera to take photos.",
+        "NSLocationWhenInUseUsageDescription": "We need your location to find rides near you.",
+        "NSLocationAlwaysUsageDescription": "We need your location to track rides."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/images/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "permissions": [
+        "READ_EXTERNAL_STORAGE",
+        "WRITE_EXTERNAL_STORAGE",
+        "CAMERA",
+        "ACCESS_FINE_LOCATION",
+        "ACCESS_COARSE_LOCATION"
+      ],
+      "config": {
+        "googleMaps": {
+          "apiKey": "AIzaSyAfVD-fFk1aa4yy4YFesrLIXhxwNHhQtxU"
+        }
       }
     },
     "web": {
@@ -31,6 +49,19 @@
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff"
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "We need access to your photo library to upload images.",
+          "cameraPermission": "We need access to your camera to take photos."
+        }
+      ],
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Allow Nepride to use your location."
         }
       ]
     ],

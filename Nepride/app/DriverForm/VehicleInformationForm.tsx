@@ -13,6 +13,10 @@ import {
 import * as ImagePicker from "expo-image-picker";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import axios from "axios";
+import { MaterialIcons } from "@expo/vector-icons";
+
+// Define valid icon names
+type MaterialIconName = "motorcycle" | "directions-car" | "ev-station";
 
 interface VehicleFormData {
   vehicleType: string;
@@ -40,6 +44,13 @@ const VehicleInformationForm = () => {
     driverId: driverId as string,
   });
 
+  // Vehicle type options
+  const vehicleTypes: { type: string; icon: MaterialIconName }[] = [
+    { type: "Bike", icon: "motorcycle" },
+    { type: "Car", icon: "directions-car" },
+    { type: "Electric", icon: "ev-station" },
+  ];
+
   // Request permissions at the start of the component
   useEffect(() => {
     const requestPermissions = async () => {
@@ -55,6 +66,12 @@ const VehicleInformationForm = () => {
     requestPermissions();
   }, []);
 
+  // Handle vehicle type selection
+  const handleVehicleTypeSelect = (type: string) => {
+    setForm((prev) => ({ ...prev, vehicleType: type }));
+  };
+
+  // Pick image from the device's gallery
   const pickImage = async (
     field:
       | "vehiclePhoto"
@@ -78,72 +95,53 @@ const VehicleInformationForm = () => {
     }
   };
 
-  const getBlobFromUri = async (uri: string) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return blob;
-  };
-
-  const validateForm = () => {
-    return Object.entries(form).every(
-      ([key, value]) => key === "driverId" || value
-    );
-  };
-
+  // Handle form submission
   const handleSubmit = async () => {
-    if (!validateForm()) {
+    if (
+      !form.vehicleType ||
+      !form.numberPlate ||
+      !form.productionYear ||
+      !form.vehiclePhoto ||
+      !form.vehicleDetailPhoto ||
+      !form.ownerDetailPhoto ||
+      !form.renewalDetailPhoto ||
+      !form.driverId
+    ) {
       Alert.alert("Error", "Please fill out all fields and upload all photos.");
       return;
     }
-
+  
     setLoading(true);
     const formData = new FormData();
-
+    
     // Append text fields
     formData.append("vehicleType", form.vehicleType);
     formData.append("numberPlate", form.numberPlate);
     formData.append("productionYear", form.productionYear);
     formData.append("driverId", form.driverId);
-
-    // Append photos
-    const appendPhotoToFormData = async (
-      field: string,
-      uri: string | null,
-      fileName: string
-    ) => {
+  
+    // Append photo files directly
+    const appendPhotoToFormData = (fieldName: string, uri: string) => {
       if (uri) {
-        try {
-          const blob = await getBlobFromUri(uri);
-          const file = new File([blob], fileName, { type: blob.type });
-          formData.append(field, file as any); // Cast to 'any' to avoid TypeScript errors
-        } catch (error) {
-          Alert.alert("Error", `Failed to process ${field}`);
-        }
+        const filename = uri.split('/').pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : "image/jpeg";
+        
+        formData.append(fieldName, {
+          uri: uri,
+          name: filename || `${fieldName}.jpg`,
+          type
+        } as any);
       }
     };
-
+  
     try {
-      await appendPhotoToFormData(
-        "vehiclePhoto",
-        form.vehiclePhoto,
-        "vehiclePhoto.jpg"
-      );
-      await appendPhotoToFormData(
-        "vehicleDetailPhoto",
-        form.vehicleDetailPhoto,
-        "vehicleDetailPhoto.jpg"
-      );
-      await appendPhotoToFormData(
-        "ownerDetailPhoto",
-        form.ownerDetailPhoto,
-        "ownerDetailPhoto.jpg"
-      );
-      await appendPhotoToFormData(
-        "renewalDetailPhoto",
-        form.renewalDetailPhoto,
-        "renewalDetailPhoto.jpg"
-      );
-
+      // Append all photos using the helper function
+      appendPhotoToFormData("vehiclePhoto", form.vehiclePhoto);
+      appendPhotoToFormData("vehicleDetailPhoto", form.vehicleDetailPhoto);
+      appendPhotoToFormData("ownerDetailPhoto", form.ownerDetailPhoto);
+      appendPhotoToFormData("renewalDetailPhoto", form.renewalDetailPhoto);
+  
       const response = await axios.post(
         "http://192.168.1.70:3001/driver/vehicleinfo",
         formData,
@@ -153,13 +151,14 @@ const VehicleInformationForm = () => {
           },
         }
       );
-
+  
       Alert.alert("Success", response.data.message);
       router.replace({
         pathname: "/DriverForm/LicenseInformationForm",
         params: { driverId },
       });
     } catch (error) {
+      console.error("Error submitting form:", error);
       const message = axios.isAxiosError(error)
         ? error.response?.data.message ?? "Failed to save vehicle information"
         : "An unexpected error occurred";
@@ -168,7 +167,7 @@ const VehicleInformationForm = () => {
       setLoading(false);
     }
   };
-
+  // Render input fields
   const renderInput = (
     key: keyof VehicleFormData,
     placeholder: string,
@@ -187,6 +186,43 @@ const VehicleInformationForm = () => {
     </View>
   );
 
+  // Render vehicle type icons
+  const renderVehicleTypeIcons = () => (
+    <View style={styles.vehicleTypeContainer}>
+      <Text style={styles.label}>Vehicle Type</Text>
+      <View style={styles.vehicleTypeIcons}>
+        {vehicleTypes.map((vehicle) => (
+          <TouchableOpacity
+            key={vehicle.type}
+            style={[
+              styles.vehicleTypeButton,
+              form.vehicleType === vehicle.type &&
+                styles.vehicleTypeButtonActive,
+            ]}
+            onPress={() => handleVehicleTypeSelect(vehicle.type)}
+            activeOpacity={0.8}
+          >
+            <MaterialIcons
+              name={vehicle.icon}
+              size={40}
+              color={form.vehicleType === vehicle.type ? "#3b82f6" : "#666"}
+            />
+            <Text
+              style={[
+                styles.vehicleTypeText,
+                form.vehicleType === vehicle.type &&
+                  styles.vehicleTypeTextActive,
+              ]}
+            >
+              {vehicle.type}
+            </Text>
+          </TouchableOpacity>
+        ))}
+      </View>
+    </View>
+  );
+
+  // Render image picker
   const renderImagePicker = (
     field:
       | "vehiclePhoto"
@@ -217,7 +253,7 @@ const VehicleInformationForm = () => {
         <Text style={styles.header}>Vehicle Information</Text>
         <Text style={styles.subtitle}>Please provide your vehicle details</Text>
 
-        {renderInput("vehicleType", "Vehicle Type")}
+        {renderVehicleTypeIcons()}
         {renderInput("numberPlate", "Number Plate")}
         {renderInput("productionYear", "Production Year", "numeric")}
 
@@ -243,6 +279,7 @@ const VehicleInformationForm = () => {
     </ScrollView>
   );
 };
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -293,6 +330,35 @@ const styles = StyleSheet.create({
     padding: 16,
     fontSize: 16,
     backgroundColor: "#fafafa",
+  },
+  vehicleTypeContainer: {
+    marginBottom: 20,
+  },
+  vehicleTypeIcons: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    marginTop: 10,
+  },
+  vehicleTypeButton: {
+    alignItems: "center",
+    padding: 10,
+    borderWidth: 1,
+    borderColor: "#ddd",
+    borderRadius: 12,
+    width: "30%",
+  },
+  vehicleTypeButtonActive: {
+    borderColor: "#3b82f6",
+    backgroundColor: "#f0f8ff",
+  },
+  vehicleTypeText: {
+    marginTop: 5,
+    fontSize: 14,
+    color: "#666",
+  },
+  vehicleTypeTextActive: {
+    color: "#3b82f6",
+    fontWeight: "600",
   },
   imagePickerContainer: {
     marginBottom: 20,

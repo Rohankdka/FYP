@@ -6,8 +6,12 @@ import { useRouter } from "expo-router";
 
 interface AuthContextType {
   user: {
-    status: string; id: string; username: string; email: string; role: string 
-} | null;
+    status: string;
+    id: string;
+    username: string;
+    email: string;
+    role: string;
+  } | null;
   token: string | null;
   loading: boolean;
   login: (email: string, password: string) => Promise<void>;
@@ -66,11 +70,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
       });
       const { token, role, id } = response.data; // Destructure token, role, and id
       console.log("Login successful, token:", token); // Debug log
-  
+
       await AsyncStorage.setItem("token", token);
       setToken(token);
       await fetchUser(token);
-  
+
       // Redirect based on role with `id` as a route parameter
       switch (role) {
         case "admin":

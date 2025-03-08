@@ -84,19 +84,29 @@ const LicenseInformationForm = () => {
     setLoading(true);
     const formData = new FormData();
 
+    // Append text fields
     formData.append("licenseNumber", form.licenseNumber);
     formData.append("driverId", form.driverId);
 
-    try {
-      if (form.frontPhoto) {
-        const frontBlob = await getBlobFromUri(form.frontPhoto);
-        formData.append("frontPhoto", frontBlob, "frontPhoto.jpg");
-      }
+    // Append photo files directly
+    const appendPhotoToFormData = (fieldName: string, uri: string) => {
+      if (uri) {
+        const filename = uri.split("/").pop();
+        const match = /\.(\w+)$/.exec(filename || "");
+        const type = match ? `image/${match[1]}` : "image/jpeg";
 
-      if (form.backPhoto) {
-        const backBlob = await getBlobFromUri(form.backPhoto);
-        formData.append("backPhoto", backBlob, "backPhoto.jpg");
+        formData.append(fieldName, {
+          uri: uri,
+          name: filename || `${fieldName}.jpg`,
+          type,
+        } as any);
       }
+    };
+
+    try {
+      // Append photos using the helper function
+      appendPhotoToFormData("frontPhoto", form.frontPhoto);
+      appendPhotoToFormData("backPhoto", form.backPhoto);
 
       const response = await axios.post(
         "http://192.168.1.70:3001/driver/licenseinfo",
@@ -109,9 +119,9 @@ const LicenseInformationForm = () => {
       );
 
       Alert.alert("Success", response.data.message);
-      Alert.alert("Success", response.data.message);
       router.replace("/auth/login");
     } catch (error) {
+      console.error("Error submitting form:", error);
       const message = axios.isAxiosError(error)
         ? error.response?.data.message ?? "Failed to save information"
         : "An unexpected error occurred";
@@ -120,7 +130,6 @@ const LicenseInformationForm = () => {
       setLoading(false);
     }
   };
-
   return (
     <KeyboardAvoidingView
       behavior={Platform.OS === "ios" ? "padding" : "height"}
@@ -203,7 +212,6 @@ const LicenseInformationForm = () => {
   );
 };
 
-// Add your styles here
 const styles = StyleSheet.create({
   container: {
     flex: 1,

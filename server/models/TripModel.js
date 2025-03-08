@@ -4,7 +4,8 @@ const tripSchema = new mongoose.Schema(
   {
     driver: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Nepride",
+      ref: "Nepride", // Ensure this matches the correct model name
+      required: true, // Ensure the driver field is required
     },
     departureLocation: {
       type: String,
@@ -89,7 +90,6 @@ const tripSchema = new mongoose.Schema(
   },
   { timestamps: true } // Automatically manage createdAt and updatedAt fields
 );
-
 // Define the Trip model using the schema
 const Trip = mongoose.model("Trip", tripSchema);
 

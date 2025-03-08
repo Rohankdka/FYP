@@ -10,38 +10,43 @@ import rideRoutes from "./routers/rideRoutes.js";
 import Trip from "./routers/tripRoutes.js";
 import { Server } from "socket.io";
 import http from "http";
-import Ride from "./models/rideModel.js"
+import Ride from "./models/rideModel.js";
+import NeprideModel from "./models/NeprideModel.js";
+import DriverModel from "./models/DriverModel.js";
 
-dotenv.config(); // Load environment variables
+dotenv.config();
 
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
   cors: {
-    origin: "*", // Allow all origins (update in production)
+    origin: "*",
   },
 });
 
-// 🟢 Socket.IO connection
 io.on("connection", (socket) => {
   console.log(`✅ A user connected: ${socket.id}`);
 
-  // 🟢 Handle driver going online
-  socket.on("driver-online", (driverId) => {
-    console.log(`✅ Driver ${driverId} is online and joined room driver-${driverId}`);
-    socket.join(`driver-${driverId}`); // Driver joins a specific room
+  socket.on("join", (room) => {
+    socket.join(room);
+    console.log(`User joined room: ${room}`);
   });
 
-  // 🟢 Handle driver going offline
+  socket.on("driver-online", (driverId) => {
+    console.log(
+      `✅ Driver ${driverId} is online and joined room driver-${driverId}`
+    );
+    socket.join(`driver-${driverId}`);
+    io.emit("driver-available", { driverId, status: "online" });
+  });
+
   socket.on("driver-offline", (driverId) => {
     console.log(`🚫 Driver ${driverId} is offline`);
-    socket.leave(`driver-${driverId}`); // Driver leaves their room
+    socket.leave(`driver-${driverId}`);
+    io.emit("driver-available", { driverId, status: "offline" });
   });
 
-  // 🟢 Handle passenger requesting a ride
   socket.on("request-ride", async (data) => {
-    console.log("🔍 Received ride request event on server:", data);
-
     try {
       const ride = await Ride.create({
         passengerId: data.passengerId,
@@ -49,89 +54,111 @@ io.on("connection", (socket) => {
         dropoffLocation: data.dropoffLocation,
         pickupLocationName: data.pickupLocationName,
         dropoffLocationName: data.dropoffLocationName,
-        status: "requested", // Default status
+        status: "requested",
+        distance: data.distance,
+        estimatedTime: data.estimatedTime,
       });
 
-      console.log("✅ Ride saved in DB:", ride);
+      const passenger = await NeprideModel.findById(data.passengerId).select(
+        "phone username"
+      );
+      const rideWithPassenger = {
+        ...ride._doc,
+        passenger: { phone: passenger.phone, username: passenger.username },
+      };
 
-      // Notify all online drivers about the ride request
-      io.emit("ride-request", ride); // Broadcast to all drivers
-      console.log("📩 Ride request broadcasted to all drivers");
+      io.emit("ride-request", rideWithPassenger);
+      socket.emit("ride-notification", {
+        message: "Ride request sent to nearby drivers",
+      });
     } catch (error) {
       console.error("❌ Error saving ride:", error);
     }
   });
 
-  // 🟢 Handle driver accepting/rejecting a ride
   socket.on("ride-response", async (data) => {
-    console.log("🔍 Ride response received:", data);
-
     try {
+      console.log(
+        `Ride response received: rideId=${data.rideId}, driverId=${data.driverId}, status=${data.status}`
+      );
       const ride = await Ride.findById(data.rideId);
       if (!ride) {
-        console.log("❌ Ride not found");
+        console.error(`Ride ${data.rideId} not found`);
         return;
       }
 
-      // Update ride with driverId and status
+      const driver = await DriverModel.findOne({ user: data.driverId });
+      if (!driver) {
+        console.error(
+          `Driver ${data.driverId} not found in drivers collection`
+        );
+      } else {
+        console.log(`Driver ${data.driverId} found: ${driver.fullName}`);
+      }
+
       ride.driverId = data.driverId;
-      ride.status = data.status;
+      ride.status = data.status; // This will now work because "rejected" is a valid enum value
       await ride.save();
 
-      // Notify the passenger
       io.to(`passenger-${ride.passengerId}`).emit("ride-status", {
         rideId: ride._id,
         status: ride.status,
+        driverId: data.driverId,
       });
 
-      console.log(`📩 Ride status update sent to passenger-${ride.passengerId}`);
+      io.to(`driver-${data.driverId}`).emit("ride-notification", {
+        message: `Ride ${data.status}`,
+      });
+
+      if (data.status === "rejected") {
+        io.emit("ride-request", ride); // Re-emit ride request to other drivers
+      }
     } catch (error) {
       console.error("❌ Error updating ride:", error);
     }
   });
-
-  // 🟢 Handle ride status updates (e.g., picked up, completed)
   socket.on("ride-status-update", async (data) => {
-    console.log("🔍 Ride status update received:", data);
-
     try {
       const ride = await Ride.findById(data.rideId);
-      if (!ride) {
-        console.log("❌ Ride not found");
-        return;
-      }
+      if (!ride) return;
 
       ride.status = data.status;
       await ride.save();
 
-      // Notify the passenger
       io.to(`passenger-${ride.passengerId}`).emit("ride-status", {
         rideId: ride._id,
         status: ride.status,
       });
 
-      console.log(`📩 Ride status update sent to passenger-${ride.passengerId}`);
+      io.to(`driver-${ride.driverId}`).emit("ride-notification", {
+        message: `Ride status updated to ${data.status}`,
+      });
+
+      if (data.status === "completed") {
+        // Notify both passenger and driver that the ride is completed
+        io.to(`passenger-${ride.passengerId}`).emit("ride-completed", {
+          rideId: ride._id,
+          message: "Ride completed. Thank you for using our service!",
+        });
+        io.to(`driver-${ride.driverId}`).emit("ride-completed", {
+          rideId: ride._id,
+          message: "Ride completed. You are now available for new rides.",
+        });
+      }
     } catch (error) {
       console.error("❌ Error updating ride status:", error);
     }
   });
 
-  // 🟢 Handle disconnection
   socket.on("disconnect", () => {
     console.log(`⚠️ A user disconnected: ${socket.id}`);
   });
 });
 
 app.use("/uploads", express.static("uploads"));
-
-// Middleware
 app.use(express.json());
-app.use(cors({
-  origin: "*", // Allow all origins (or specify frontend URL)
-  credentials: true
-}));
+app.use(cors({ origin: "*", credentials: true }));
 
-// Database connection
 mongoose
   .connect(process.env.MONGO_URI, {
     useNewUrlParser: true,
@@ -143,24 +170,21 @@ mongoose
     process.exit(1);
   });
 
-// Routes
 app.use("/auth", authRoutes);
 app.use("/users", userRoutes);
 app.use("/driver", driverRoutes);
 app.use("/admin", adminRoutes);
 app.use("/ride", rideRoutes);
-app.use("/trip", Trip)
+app.use("/trip", Trip);
 
-// 404 Handler
 app.use((req, res) => res.status(404).json({ message: "Route not found" }));
-
-// Global Error Handler
 app.use((err, req, res, next) => {
   console.error(err.stack);
-  res.status(500).json({ message: "Something went wrong!", error: err.message });
+  res
+    .status(500)
+    .json({ message: "Something went wrong!", error: err.message });
 });
 
-// Start server
 const PORT = process.env.PORT || 3001;
 server.listen(PORT, "0.0.0.0", () => {
   console.log(`🚀 Server running on port ${PORT}`);

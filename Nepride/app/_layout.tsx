@@ -130,7 +130,7 @@ export default function Layout() {
           }}
         />
       </Stack>
-   </AuthProvider>
+    </AuthProvider>
   );
 }
 

@@ -1,4 +1,3 @@
-// models/DriverModel.js
 import mongoose from "mongoose";
 
 const DriverSchema = new mongoose.Schema(
@@ -18,13 +17,14 @@ const DriverSchema = new mongoose.Schema(
     backPhoto: { type: String },
 
     // Vehicle Information
-    vehicleType: { type: String, enum: ["Car", "Bike", "Electric"] },
+    vehicleType: { type: String, enum: ["Car", "Bike", "Electric"], required: false },
     numberPlate: { type: String, unique: true },
     productionYear: { type: String },
     vehiclePhoto: { type: String },
     vehicleDetailPhoto: { type: String },
     ownerDetailPhoto: { type: String },
     renewalDetailPhoto: { type: String },
+
 
     // Approval Status
     status: {

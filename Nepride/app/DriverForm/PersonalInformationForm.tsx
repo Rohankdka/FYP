@@ -69,22 +69,8 @@ const PersonalInformationForm = () => {
     }
   };
 
-  // Convert image URI to a blob for file upload
-  const getBlobFromUri = async (uri: string) => {
-    const response = await fetch(uri);
-    const blob = await response.blob();
-    return blob;
-  };
-
-  if (!form.userId) {
-    console.log("userId is missing");
-    Alert.alert("Error", "userId is required.");
-    return;
-  }
-
-  // Handle form submission
   const handleSubmit = async () => {
-    console.log("Submit button clicked"); // Debugging: Log button click
+    console.log("Submit button clicked");
 
     // Validate required fields
     if (
@@ -96,12 +82,12 @@ const PersonalInformationForm = () => {
       !form.photo ||
       !form.userId
     ) {
-      console.log("Validation failed: Missing fields"); // Debugging: Log validation failure
+      console.log("Validation failed: Missing fields");
       Alert.alert("Error", "Please fill out all fields and upload a photo.");
       return;
     }
 
-    console.log("Form validated successfully"); // Debugging: Log validation success
+    console.log("Form validated successfully");
     setLoading(true);
 
     // Prepare FormData
@@ -112,23 +98,25 @@ const PersonalInformationForm = () => {
     formData.append("gender", form.gender);
     formData.append("dob", form.dob);
     formData.append("citizenshipNumber", form.citizenshipNumber);
-    formData.append("userId", form.userId); // Include userId
+    formData.append("userId", form.userId);
 
     // Append the photo file
     if (form.photo) {
-      try {
-        const imageBlob = await getBlobFromUri(form.photo);
-        formData.append("photo", imageBlob, "photo.jpg");
-      } catch (error) {
-        console.error("Error processing image:", error); // Debugging: Log image processing error
-        Alert.alert("Error", "Failed to process image");
-        setLoading(false);
-        return;
-      }
+      const filename = form.photo.split("/").pop(); // Extract filename from URI
+      const match = /\.(\w+)$/.exec(filename || ""); // Extract file extension
+      const type = match ? `image/${match[1]}` : "image"; // Determine MIME type
+
+      formData.append("photo", {
+        uri: form.photo,
+        name: filename || "photo.jpg",
+        type,
+      } as any); // Use `as any` to avoid TypeScript errors
     }
 
+    console.log("Form Data:", formData); // Log FormData
+
     try {
-      console.log("Sending request to backend..."); // Debugging: Log request initiation
+      console.log("Sending request to backend...");
       const response = await axios.post(
         "http://192.168.1.70:3001/driver/personalinfo",
         formData,
@@ -139,17 +127,17 @@ const PersonalInformationForm = () => {
         }
       );
 
-      console.log("Backend response:", response.data); // Debugging: Log backend response
+      console.log("Backend response:", response.data);
       Alert.alert("Success", response.data.message);
 
-      // Redirect to the next screen (e.g., VehicleInformationForm)
+      // Redirect to the next screen
       const driverId = response.data.driver._id;
       router.push({
         pathname: "/DriverForm/VehicleInformationForm",
         params: { driverId },
       });
     } catch (error) {
-      console.error("Submission error:", error); // Debugging: Log submission error
+      console.error("Submission error:", error);
       const message = axios.isAxiosError(error)
         ? error.response?.data.message ?? "Failed to save information"
         : "An unexpected error occurred";
@@ -158,7 +146,6 @@ const PersonalInformationForm = () => {
       setLoading(false);
     }
   };
-
   // Render input fields
   const renderInput = (
     key: keyof FormData,
@@ -217,7 +204,7 @@ const PersonalInformationForm = () => {
               styles.submitButton,
               loading && styles.submitButtonDisabled,
             ]}
-            onPress={handleSubmit} // Ensure onPress is correctly attached
+            onPress={handleSubmit}
             disabled={loading}
             activeOpacity={0.8}
           >
