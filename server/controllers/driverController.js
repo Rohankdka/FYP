@@ -216,3 +216,4 @@ export const getDriverById = async (req, res) => {
     return res.status(500).json({ message: "Error fetching driver", error: error.message });
   }
 };
+

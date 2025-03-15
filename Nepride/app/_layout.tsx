@@ -129,6 +129,20 @@ export default function Layout() {
             title: "Admin",
           }}
         />
+
+        <Stack.Screen
+          name="Dashboard/passengerReserveBookings"
+          options={{
+            title: "ReserveBookings",
+          }}
+        />
+
+        <Stack.Screen
+          name="Dashboard/driverReserveBookings"
+          options={{
+            title: "ReserveBookings",
+          }}
+        />
       </Stack>
     </AuthProvider>
   );

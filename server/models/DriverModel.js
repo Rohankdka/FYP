@@ -17,7 +17,11 @@ const DriverSchema = new mongoose.Schema(
     backPhoto: { type: String },
 
     // Vehicle Information
-    vehicleType: { type: String, enum: ["Car", "Bike", "Electric"], required: false },
+    vehicleType: {
+      type: String,
+      enum: ["Car", "Bike", "Electric"],
+      required: false,
+    },
     numberPlate: { type: String, unique: true },
     productionYear: { type: String },
     vehiclePhoto: { type: String },
@@ -25,13 +29,13 @@ const DriverSchema = new mongoose.Schema(
     ownerDetailPhoto: { type: String },
     renewalDetailPhoto: { type: String },
 
-
     // Approval Status
     status: {
       type: String,
       enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
+    
 
     // Reference to Nepride model
     user: {

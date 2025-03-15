@@ -14,6 +14,13 @@ const RideSchema = new mongoose.Schema(
     dropoffLocationName: { type: String, required: true },
     distance: { type: Number },
     estimatedTime: { type: Number },
+    fare: { type: Number },
+    vehicleType: { type: String, enum: ["Bike", "Car", "Electric"] },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "completed"],
+      default: "pending",
+    },
     status: {
       type: String,
       enum: [
@@ -23,7 +30,7 @@ const RideSchema = new mongoose.Schema(
         "completed",
         "canceled",
         "rejected",
-      ], // Add "rejected" here
+      ],
       default: "requested",
     },
   },

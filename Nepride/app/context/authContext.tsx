@@ -64,10 +64,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Handle login
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post("http://192.168.1.70:3001/auth/login", {
-        email,
-        password,
-      });
+      const response = await axios.post(
+        "http://192.168.1.70:3001/auth/login",
+        {
+          email,
+          password,
+        }
+      );
       const { token, role, id } = response.data; // Destructure token, role, and id
       console.log("Login successful, token:", token); // Debug log
 

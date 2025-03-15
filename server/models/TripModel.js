@@ -4,8 +4,8 @@ const tripSchema = new mongoose.Schema(
   {
     driver: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "Nepride", // Ensure this matches the correct model name
-      required: true, // Ensure the driver field is required
+      ref: "Nepride",
+      required: true,
     },
     departureLocation: {
       type: String,
@@ -79,17 +79,36 @@ const tripSchema = new mongoose.Schema(
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Nepride",
-        validate: {
-          validator: function (value) {
-            return !this.bookedSeats.includes(value); // Ensure no duplicate users
-          },
-          message: "User has already booked a seat",
-        },
       },
     ],
   },
-  { timestamps: true } // Automatically manage createdAt and updatedAt fields
+  { timestamps: true }
 );
+
+// Create a virtual property to check seats availability
+tripSchema.virtual("seatsAvailable").get(function () {
+  return this.availableSeats - this.bookedSeats.length;
+});
+
+// Prevent booking more seats than available
+tripSchema.pre("save", function (next) {
+  if (this.bookedSeats.length > this.availableSeats) {
+    const error = new Error("Cannot book more seats than available");
+    return next(error);
+  }
+
+  // Check for duplicate bookings
+  const uniqueBookings = [
+    ...new Set(this.bookedSeats.map((id) => id.toString())),
+  ];
+  if (uniqueBookings.length !== this.bookedSeats.length) {
+    const error = new Error("Duplicate booking detected");
+    return next(error);
+  }
+
+  next();
+});
+
 // Define the Trip model using the schema
 const Trip = mongoose.model("Trip", tripSchema);
 
