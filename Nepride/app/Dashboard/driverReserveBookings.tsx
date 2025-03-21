@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, SetStateAction } from "react";
 import {
   View,
   Text,
@@ -20,6 +20,7 @@ import axios from "axios";
 import { Ionicons, FontAwesome5 } from "@expo/vector-icons";
 import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
+import getSocket from "../components/socket";
 
 const API_URL = "http://192.168.1.70:3001";
 
@@ -58,9 +59,20 @@ interface Passenger {
   phone: string;
 }
 
+interface Notification {
+  _id: string;
+  userId: string;
+  title: string;
+  message: string;
+  type: string;
+  read: boolean;
+  createdAt: string;
+}
+
 const DriverReserveBooking = () => {
   const { driverId } = useLocalSearchParams<{ driverId: string }>();
   const router = useRouter();
+  const socket = getSocket();
 
   const [myTrips, setMyTrips] = useState<Trip[]>([]);
   const [loading, setLoading] = useState(false);
@@ -73,6 +85,9 @@ const DriverReserveBooking = () => {
   const [showPassengers, setShowPassengers] = useState(false);
   const [passengers, setPassengers] = useState<Passenger[]>([]);
   const [token, setToken] = useState<string | null>(null);
+  const [notifications, setNotifications] = useState<Notification[]>([]);
+  const [unreadNotifications, setUnreadNotifications] = useState(0);
+  const [showNotifications, setShowNotifications] = useState(false);
 
   // Form states for creating/editing a trip
   const [departureLocation, setDepartureLocation] = useState("");
@@ -115,10 +130,112 @@ const DriverReserveBooking = () => {
     };
   };
 
+  // Setup socket connection
+  useEffect(() => {
+    if (driverId && token) {
+      console.log("Setting up socket connection for driver:", driverId);
+
+      // Connect to socket if not already connected
+      if (!socket.connected) {
+        socket.connect();
+      }
+
+      // Join driver's notification room
+      socket.emit("join-user", driverId);
+
+      // Listen for booking events
+      const handleNewBooking = (data: { tripId: any }) => {
+        console.log("New booking received:", data);
+        if (data.tripId) {
+          // Refresh trips data
+          fetchTrips();
+          // Show alert
+          Alert.alert(
+            "New Booking",
+            "A passenger has booked a seat on your trip!"
+          );
+        }
+      };
+
+      // Listen for booking cancellations
+      const handleBookingCancelled = (data: { tripId: any }) => {
+        console.log("Booking cancelled:", data);
+        if (data.tripId) {
+          // Refresh trips data
+          fetchTrips();
+          // Show alert
+          Alert.alert(
+            "Booking Cancelled",
+            "A passenger has cancelled their booking."
+          );
+        }
+      };
+
+      // Listen for new notifications
+      const handleNewNotification = (notification: Notification) => {
+        console.log("New notification received:", notification);
+        setNotifications((prev) => [notification, ...prev]);
+        setUnreadNotifications((prev) => prev + 1);
+
+        // Show alert for important notifications
+        if (
+          ["new_booking", "booking_cancelled", "payment_received"].includes(
+            notification.type
+          )
+        ) {
+          Alert.alert(notification.title, notification.message);
+        }
+      };
+
+      // Get initial notifications count
+      socket.emit("get-notifications-count", driverId);
+
+      const handleNotificationsCount = (data: {
+        count: SetStateAction<number>;
+      }) => {
+        console.log("Notifications count received:", data);
+        setUnreadNotifications(data.count);
+      };
+
+      // Add event listeners
+      socket.on("trip-booked", handleNewBooking);
+      socket.on("booking-cancelled", handleBookingCancelled);
+      socket.on("new-notification", handleNewNotification);
+      socket.on("notifications-count", handleNotificationsCount);
+
+      // Listen for payment events
+      socket.on("payment-event", (data: { driverId: string; amount: any }) => {
+        console.log("Payment event received:", data);
+        if (data.driverId === driverId) {
+          Alert.alert(
+            "Payment Received",
+            `Payment of NPR ${data.amount} received for trip booking.`
+          );
+        }
+      });
+
+      return () => {
+        // Remove event listeners when component unmounts
+        socket.off("trip-booked", handleNewBooking);
+        socket.off("booking-cancelled", handleBookingCancelled);
+        socket.off("new-notification", handleNewNotification);
+        socket.off("notifications-count", handleNotificationsCount);
+        socket.off("payment-event");
+      };
+    }
+  }, [driverId, token]);
+
   // Fetch driver's trips
-  const fetchMyTrips = async () => {
-    setLoading(true);
+  const fetchTrips = async () => {
+    if (!token) {
+      console.error("No token available");
+      return;
+    }
+
     try {
+      setLoading(true);
+      console.log(`Fetching trips for driver: ${driverId}`);
+
       const response = await axios.get(
         `${API_URL}/trip/driver/${driverId}/trips`,
         getAuthHeaders()
@@ -133,12 +250,111 @@ const DriverReserveBooking = () => {
         }
       });
 
+      console.log(
+        `Fetched ${filteredTrips.length} trips for tab: ${activeTab}`
+      );
       setMyTrips(filteredTrips);
     } catch (error) {
       console.error("Error fetching trips:", error);
-      Alert.alert("Error", "Failed to fetch your trips");
+      Alert.alert(
+        "Error",
+        "Failed to fetch your trips. Please check your connection and try again."
+      );
     } finally {
+      // Always reset loading state
       setLoading(false);
+    }
+  };
+
+  // Fetch notifications
+  const fetchNotifications = async () => {
+    if (!token) {
+      console.error("No token available for fetching notifications");
+      return;
+    }
+
+    try {
+      // Make sure we're sending the userId as a query parameter
+      const response = await axios.get(
+        `${API_URL}/notifications/user?userId=${driverId}`,
+        getAuthHeaders()
+      );
+
+      console.log("Notifications fetched:", response.data.length);
+      setNotifications(response.data);
+
+      // Count unread notifications
+      const unread = response.data.filter(
+        (notification: Notification) => !notification.read
+      ).length;
+      setUnreadNotifications(unread);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+
+      // Check if it's an authentication error
+      if (axios.isAxiosError(error) && error.response?.status === 401) {
+        Alert.alert(
+          "Authentication Error",
+          "Your session has expired. Please log in again."
+        );
+        // You might want to redirect to login screen here
+      }
+    }
+  };
+
+  // Mark notification as read
+  const markNotificationAsRead = async (notificationId: string) => {
+    if (!token) return;
+
+    try {
+      await axios.put(
+        `${API_URL}/notifications/${notificationId}/read`,
+        {}, // Empty body
+        getAuthHeaders()
+      );
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((notification) =>
+          notification._id === notificationId
+            ? { ...notification, read: true }
+            : notification
+        )
+      );
+
+      // Update unread count
+      setUnreadNotifications((prev) => Math.max(0, prev - 1));
+
+      // Update notification count in socket
+      socket.emit("get-notifications-count", driverId);
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+    }
+  };
+
+  // Mark all notifications as read
+  const markAllNotificationsAsRead = async () => {
+    if (!token) return;
+
+    try {
+      await axios.put(
+        `${API_URL}/notifications/read-all`,
+        { userId: driverId }, // Include userId in the request body
+        getAuthHeaders()
+      );
+
+      // Update local state
+      setNotifications((prev) =>
+        prev.map((notification) => ({ ...notification, read: true }))
+      );
+
+      // Reset unread count
+      setUnreadNotifications(0);
+
+      // Update notification count in socket
+      socket.emit("get-notifications-count", driverId);
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
     }
   };
 
@@ -173,7 +389,6 @@ const DriverReserveBooking = () => {
     setActionLoading(true);
     try {
       const tripData = {
-        driver: driverId,
         departureLocation,
         destinationLocation,
         departureDate: departureDateString,
@@ -193,21 +408,46 @@ const DriverReserveBooking = () => {
         },
       };
 
-      await axios.post(
+      console.log("Creating trip...");
+
+      const response = await axios.post(
         `${API_URL}/trip/create/${driverId}`,
         tripData,
         getAuthHeaders()
       );
+
+      console.log("Trip created successfully");
+
+      // Emit new trip event to socket
+      socket.emit("new-trip", response.data);
+
       Alert.alert("Success", "Trip created successfully!");
 
       // Reset form
       resetForm();
       setShowCreateModal(false);
-      fetchMyTrips();
+      fetchTrips();
     } catch (error) {
       console.error("Error creating trip:", error);
-      Alert.alert("Error", "Failed to create trip. Please try again.");
+
+      let errorMessage = "Failed to create trip. Please try again.";
+
+      if (axios.isAxiosError(error) && error.response) {
+        console.log("Error response:", error.response.data);
+
+        if (error.response.data.message) {
+          errorMessage = error.response.data.message;
+        }
+
+        if (error.response.data.errors) {
+          errorMessage +=
+            "\n" + Object.values(error.response.data.errors).join("\n");
+        }
+      }
+
+      Alert.alert("Error", errorMessage);
     } finally {
+      // Always reset loading state
       setActionLoading(false);
     }
   };
@@ -215,6 +455,15 @@ const DriverReserveBooking = () => {
   // Edit an existing trip
   const editTrip = async () => {
     if (!selectedTrip) return;
+
+    // Check if trip has bookings - prevent editing if it does
+    if (selectedTrip.bookedSeats && selectedTrip.bookedSeats.length > 0) {
+      Alert.alert(
+        "Cannot Edit Trip",
+        "This trip already has bookings and cannot be edited. You can only cancel it."
+      );
+      return;
+    }
 
     // Validate form
     if (
@@ -264,17 +513,21 @@ const DriverReserveBooking = () => {
         },
       };
 
-      await axios.put(
+      const response = await axios.put(
         `${API_URL}/trip/${selectedTrip._id}/${driverId}`,
         tripData,
         getAuthHeaders()
       );
+
+      // Emit trip updated event to socket
+      socket.emit("trip-updated", response.data);
+
       Alert.alert("Success", "Trip updated successfully!");
 
       // Reset form
       resetForm();
       setShowEditModal(false);
-      fetchMyTrips();
+      fetchTrips();
 
       // Send notification to booked passengers about the update
       if (selectedTrip.bookedSeats && selectedTrip.bookedSeats.length > 0) {
@@ -320,6 +573,15 @@ const DriverReserveBooking = () => {
 
   // Load trip data for editing
   const loadTripForEdit = (trip: Trip) => {
+    // Check if trip has bookings - prevent editing if it does
+    if (trip.bookedSeats && trip.bookedSeats.length > 0) {
+      Alert.alert(
+        "Cannot Edit Trip",
+        "This trip already has bookings and cannot be edited. You can only cancel it."
+      );
+      return;
+    }
+
     setDepartureLocation(trip.departureLocation);
     setDestinationLocation(trip.destinationLocation);
     setDepartureDate(new Date(trip.departureDate));
@@ -342,21 +604,52 @@ const DriverReserveBooking = () => {
   const updateTripStatus = async (tripId: string, status: string) => {
     setActionLoading(true);
     try {
-      await axios.put(
+      const response = await axios.put(
         `${API_URL}/trip/${tripId}/${driverId}`,
         { status },
         getAuthHeaders()
       );
-      Alert.alert("Success", `Trip ${status} successfully!`);
-      fetchMyTrips();
-      setShowTripDetails(false);
 
-      // Send notification to booked passengers about the status change
-      if (
-        selectedTrip &&
-        selectedTrip.bookedSeats &&
-        selectedTrip.bookedSeats.length > 0
-      ) {
+      // Emit trip updated event to socket
+      socket.emit("trip-updated", response.data);
+
+      // If completing the trip, show payment options
+      if (status === "completed") {
+        // Notify passengers about trip completion
+        try {
+          await axios.post(
+            `${API_URL}/trip/${tripId}/notify`,
+            {
+              message:
+                "Your trip has been completed. Thank you for using our service!",
+              type: "trip_completed",
+            },
+            getAuthHeaders()
+          );
+        } catch (notifyError) {
+          console.error("Error sending notifications:", notifyError);
+        }
+
+        // Complete the trip with payment
+        try {
+          await axios.post(
+            `${API_URL}/payments/process`,
+            {
+              tripId: tripId,
+              driverId: driverId,
+              paymentMethod: "cash", // Default to cash
+            },
+            getAuthHeaders()
+          );
+        } catch (completeError) {
+          console.error("Error processing payment:", completeError);
+          // Still mark as completed even if payment processing fails
+          console.log(
+            "Trip marked as completed despite payment processing error"
+          );
+        }
+      } else {
+        // For other status updates, just notify passengers
         try {
           await axios.post(
             `${API_URL}/trip/${tripId}/notify`,
@@ -370,6 +663,10 @@ const DriverReserveBooking = () => {
           console.error("Error sending notifications:", notifyError);
         }
       }
+
+      Alert.alert("Success", `Trip ${status} successfully!`);
+      fetchTrips();
+      setShowTripDetails(false);
     } catch (error) {
       console.error("Error updating trip status:", error);
       Alert.alert("Error", "Failed to update trip status. Please try again.");
@@ -380,34 +677,30 @@ const DriverReserveBooking = () => {
 
   // Delete trip
   const deleteTrip = async (tripId: string) => {
+    if (!selectedTrip) return;
+
+    // Check if trip has bookings - prevent deletion if it does
+    if (selectedTrip.bookedSeats && selectedTrip.bookedSeats.length > 0) {
+      Alert.alert(
+        "Cannot Delete Trip",
+        "This trip already has bookings and cannot be deleted. You can only cancel it."
+      );
+      setShowDeleteConfirm(false);
+      return;
+    }
+
     setActionLoading(true);
     try {
-      // Notify passengers before deleting
-      if (
-        selectedTrip &&
-        selectedTrip.bookedSeats &&
-        selectedTrip.bookedSeats.length > 0
-      ) {
-        try {
-          await axios.post(
-            `${API_URL}/trip/${tripId}/notify`,
-            {
-              message: "Your booked trip has been cancelled by the driver.",
-              type: "trip_cancelled",
-            },
-            getAuthHeaders()
-          );
-        } catch (notifyError) {
-          console.error("Error sending notifications:", notifyError);
-        }
-      }
-
-      await axios.delete(
+      const response = await axios.delete(
         `${API_URL}/trip/${tripId}/${driverId}`,
         getAuthHeaders()
       );
+
+      // Emit trip deleted event to socket
+      socket.emit("trip-deleted", tripId);
+
       Alert.alert("Success", "Trip deleted successfully!");
-      fetchMyTrips();
+      fetchTrips();
       setShowTripDetails(false);
       setShowDeleteConfirm(false);
     } catch (error) {
@@ -475,88 +768,193 @@ const DriverReserveBooking = () => {
     return date.toLocaleDateString();
   };
 
+  // Format date for notification display
+  const formatNotificationDate = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.round(diffMs / 60000);
+    const diffHours = Math.round(diffMs / 3600000);
+    const diffDays = Math.round(diffMs / 86400000);
+
+    if (diffMins < 60) {
+      return `${diffMins} min${diffMins !== 1 ? "s" : ""} ago`;
+    } else if (diffHours < 24) {
+      return `${diffHours} hour${diffHours !== 1 ? "s" : ""} ago`;
+    } else if (diffDays < 7) {
+      return `${diffDays} day${diffDays !== 1 ? "s" : ""} ago`;
+    } else {
+      return date.toLocaleDateString();
+    }
+  };
+
   // Initialize data
   useEffect(() => {
     if (token) {
-      fetchMyTrips();
+      fetchTrips();
+      fetchNotifications();
     }
   }, [driverId, activeTab, token]);
 
   // Render trip item
-  const renderTripItem = ({ item }: { item: Trip }) => (
-    <TouchableOpacity
-      className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100"
-      onPress={() => {
-        setSelectedTrip(item);
-        setShowTripDetails(true);
-      }}
-    >
-      <View className="flex-row justify-between items-center mb-2">
-        <View className="flex-row items-center">
-          <FontAwesome5 name="car" size={16} color="#4285F4" />
-          <Text className="ml-2 font-bold text-base">
-            {item.vehicleDetails.model}
-          </Text>
-        </View>
-        <View
-          className={`px-2 py-1 rounded ${
-            item.status === "scheduled"
-              ? "bg-blue-100"
-              : item.status === "in-progress"
-              ? "bg-green-100"
-              : item.status === "completed"
-              ? "bg-gray-100"
-              : "bg-red-100"
-          }`}
-        >
-          <Text
-            className={`text-xs font-medium ${
+  const renderTripItem = ({ item }: { item: Trip }) => {
+    const hasBookings = item.bookedSeats && item.bookedSeats.length > 0;
+
+    return (
+      <TouchableOpacity
+        className="bg-white rounded-lg p-4 mb-3 shadow-sm border border-gray-100"
+        onPress={() => {
+          setSelectedTrip(item);
+          setShowTripDetails(true);
+        }}
+      >
+        <View className="flex-row justify-between items-center mb-2">
+          <View className="flex-row items-center">
+            <FontAwesome5 name="car" size={16} color="#4285F4" />
+            <Text className="ml-2 font-bold text-base">
+              {item.vehicleDetails.model}
+            </Text>
+          </View>
+          <View
+            className={`px-2 py-1 rounded ${
               item.status === "scheduled"
-                ? "text-blue-700"
+                ? "bg-blue-100"
                 : item.status === "in-progress"
-                ? "text-green-700"
+                ? "bg-green-100"
                 : item.status === "completed"
-                ? "text-gray-700"
-                : "text-red-700"
+                ? "bg-gray-100"
+                : "bg-red-100"
             }`}
           >
-            {item.status.toUpperCase()}
-          </Text>
-        </View>
-      </View>
-
-      <View className="flex-row justify-between mb-2">
-        <View className="flex-1">
-          <View className="flex-row items-center">
-            <Ionicons name="location" size={16} color="green" />
-            <Text className="ml-1 text-gray-700">{item.departureLocation}</Text>
-          </View>
-          <View className="flex-row items-center mt-1">
-            <Ionicons name="location" size={16} color="red" />
-            <Text className="ml-1 text-gray-700">
-              {item.destinationLocation}
+            <Text
+              className={`text-xs font-medium ${
+                item.status === "scheduled"
+                  ? "text-blue-700"
+                  : item.status === "in-progress"
+                  ? "text-green-700"
+                  : item.status === "completed"
+                  ? "text-gray-700"
+                  : "text-red-700"
+              }`}
+            >
+              {item.status.toUpperCase()}
             </Text>
           </View>
         </View>
-        <View className="ml-2">
-          <Text className="text-gray-600">
-            {formatDate(item.departureDate)}
-          </Text>
-          <Text className="text-gray-600">{item.departureTime}</Text>
-        </View>
-      </View>
 
-      <View className="flex-row justify-between items-center mt-2 pt-2 border-t border-gray-100">
-        <Text className="text-green-600 font-bold">NPR {item.price}</Text>
-        <View className="flex-row items-center">
-          <Ionicons name="people" size={16} color="#4285F4" />
-          <Text className="ml-1 text-gray-600">
-            {item.bookedSeats.length}/{item.availableSeats} booked
-          </Text>
+        <View className="flex-row justify-between mb-2">
+          <View className="flex-1">
+            <View className="flex-row items-center">
+              <Ionicons name="location" size={16} color="green" />
+              <Text className="ml-1 text-gray-700">
+                {item.departureLocation}
+              </Text>
+            </View>
+            <View className="flex-row items-center mt-1">
+              <Ionicons name="location" size={16} color="red" />
+              <Text className="ml-1 text-gray-700">
+                {item.destinationLocation}
+              </Text>
+            </View>
+          </View>
+          <View className="ml-2">
+            <Text className="text-gray-600">
+              {formatDate(item.departureDate)}
+            </Text>
+            <Text className="text-gray-600">{item.departureTime}</Text>
+          </View>
         </View>
+
+        <View className="flex-row justify-between items-center mt-2 pt-2 border-t border-gray-100">
+          <Text className="text-green-600 font-bold">NPR {item.price}</Text>
+          <View className="flex-row items-center">
+            <Ionicons
+              name="people"
+              size={16}
+              color={hasBookings ? "#4285F4" : "gray"}
+            />
+            <Text
+              className={`ml-1 ${
+                hasBookings ? "text-blue-600 font-semibold" : "text-gray-600"
+              }`}
+            >
+              {item.bookedSeats.length}/{item.availableSeats} booked
+            </Text>
+          </View>
+        </View>
+      </TouchableOpacity>
+    );
+  };
+
+  // Render notification item
+  const renderNotificationItem = ({ item }: { item: Notification }) => (
+    <TouchableOpacity
+      className={`p-3 mb-2 rounded-lg ${
+        item.read ? "bg-gray-50" : "bg-blue-50"
+      }`}
+      onPress={() => markNotificationAsRead(item._id)}
+    >
+      <View className="flex-row justify-between items-start">
+        <View className="flex-row items-center">
+          <View
+            className={`p-2 rounded-full ${getNotificationIconBg(item.type)}`}
+          >
+            {getNotificationIcon(item.type)}
+          </View>
+          <View className="ml-2 flex-1">
+            <Text className="font-bold">{item.title}</Text>
+            <Text className="text-gray-700 mt-1">{item.message}</Text>
+            <Text className="text-gray-500 text-xs mt-1">
+              {formatNotificationDate(item.createdAt)}
+            </Text>
+          </View>
+        </View>
+        {!item.read && (
+          <View className="bg-blue-500 h-3 w-3 rounded-full mt-1" />
+        )}
       </View>
     </TouchableOpacity>
   );
+
+  // Get notification icon based on type
+  const getNotificationIcon = (type: string) => {
+    switch (type) {
+      case "new_booking":
+        return <Ionicons name="person-add" size={18} color="white" />;
+      case "booking_cancelled":
+        return <Ionicons name="close-circle" size={18} color="white" />;
+      case "payment_received":
+        return <Ionicons name="cash" size={18} color="white" />;
+      case "trip_update":
+        return <Ionicons name="refresh" size={18} color="white" />;
+      case "trip_status":
+        return <Ionicons name="information-circle" size={18} color="white" />;
+      case "trip_completed":
+        return <Ionicons name="checkmark-circle" size={18} color="white" />;
+      default:
+        return <Ionicons name="notifications" size={18} color="white" />;
+    }
+  };
+
+  // Get notification icon background color based on type
+  const getNotificationIconBg = (type: string) => {
+    switch (type) {
+      case "new_booking":
+        return "bg-green-500";
+      case "booking_cancelled":
+        return "bg-red-500";
+      case "payment_received":
+        return "bg-green-600";
+      case "trip_update":
+        return "bg-blue-500";
+      case "trip_status":
+        return "bg-blue-600";
+      case "trip_completed":
+        return "bg-green-500";
+      default:
+        return "bg-gray-500";
+    }
+  };
 
   // Custom date picker for Android compatibility
   const CustomDatePicker = () => {
@@ -564,17 +962,34 @@ const DriverReserveBooking = () => {
     const [month, setMonth] = useState(
       (departureDate.getMonth() + 1).toString().padStart(2, "0")
     );
-    const [day, setDay] = useState(
+    const [dayValue, setDayValue] = useState(
       departureDate.getDate().toString().padStart(2, "0")
     );
 
     const handleSave = () => {
-      const newDate = new Date(`${year}-${month}-${day}T00:00:00`);
+      // Make sure all values are properly formatted
+      const formattedYear = year.trim();
+      const formattedMonth = month.trim().padStart(2, "0");
+      const formattedDay = dayValue.trim().padStart(2, "0");
+
+      // Create date string in ISO format
+      const dateString = `${formattedYear}-${formattedMonth}-${formattedDay}T00:00:00`;
+      console.log("Creating date from string:", dateString);
+
+      const newDate = new Date(dateString);
+
+      // Validate the date
       if (!isNaN(newDate.getTime())) {
+        console.log("Valid date created:", newDate.toISOString());
         handleDateSelect(newDate);
         setShowDatePicker(false);
       } else {
-        Alert.alert("Invalid Date", "Please enter a valid date");
+        console.error("Invalid date:", {
+          year: formattedYear,
+          month: formattedMonth,
+          day: formattedDay,
+        });
+        Alert.alert("Invalid Date", "Please enter a valid date (YYYY-MM-DD)");
       }
     };
 
@@ -587,8 +1002,8 @@ const DriverReserveBooking = () => {
             <Text className="mb-1">Day</Text>
             <TextInput
               className="border border-gray-300 rounded p-2"
-              value={day}
-              onChangeText={setDay}
+              value={dayValue}
+              onChangeText={setDayValue}
               keyboardType="number-pad"
               maxLength={2}
             />
@@ -715,9 +1130,27 @@ const DriverReserveBooking = () => {
             <Ionicons name="arrow-back" size={24} color="black" />
           </TouchableOpacity>
           <Text className="text-xl font-bold">My Scheduled Rides</Text>
-          <TouchableOpacity onPress={() => setShowCreateModal(true)}>
-            <Ionicons name="add-circle" size={24} color="#4285F4" />
-          </TouchableOpacity>
+          <View className="flex-row">
+            <TouchableOpacity
+              className="mr-3 relative"
+              onPress={() => {
+                fetchNotifications();
+                setShowNotifications(true);
+              }}
+            >
+              <Ionicons name="notifications" size={24} color="#4285F4" />
+              {unreadNotifications > 0 && (
+                <View className="absolute -top-1 -right-1 bg-red-500 rounded-full min-w-5 h-5 flex items-center justify-center px-1">
+                  <Text className="text-white text-xs font-bold">
+                    {unreadNotifications > 99 ? "99+" : unreadNotifications}
+                  </Text>
+                </View>
+              )}
+            </TouchableOpacity>
+            <TouchableOpacity onPress={() => setShowCreateModal(true)}>
+              <Ionicons name="add-circle" size={24} color="#4285F4" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* Tabs */}
@@ -786,6 +1219,58 @@ const DriverReserveBooking = () => {
           )}
         </View>
       )}
+
+      {/* Notifications Modal */}
+      <Modal
+        visible={showNotifications}
+        transparent={true}
+        animationType="slide"
+        onRequestClose={() => setShowNotifications(false)}
+      >
+        <View className="flex-1 bg-black bg-opacity-50">
+          <View className="bg-white rounded-t-3xl mt-10 flex-1">
+            <View className="flex-row justify-between items-center p-5 border-b border-gray-200">
+              <Text className="text-xl font-bold">Notifications</Text>
+              <TouchableOpacity onPress={() => setShowNotifications(false)}>
+                <Ionicons name="close" size={24} color="black" />
+              </TouchableOpacity>
+            </View>
+
+            <View className="p-4 flex-row justify-between items-center border-b border-gray-100">
+              <Text className="text-gray-500">
+                {unreadNotifications} unread notification
+                {unreadNotifications !== 1 ? "s" : ""}
+              </Text>
+              {unreadNotifications > 0 && (
+                <TouchableOpacity
+                  className="bg-blue-100 px-3 py-1 rounded-full"
+                  onPress={markAllNotificationsAsRead}
+                >
+                  <Text className="text-blue-600 font-medium">
+                    Mark all as read
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {notifications.length > 0 ? (
+              <FlatList
+                data={notifications}
+                renderItem={renderNotificationItem}
+                keyExtractor={(item) => item._id}
+                contentContainerStyle={{ padding: 16 }}
+              />
+            ) : (
+              <View className="flex-1 justify-center items-center p-4">
+                <Ionicons name="notifications-off" size={64} color="gray" />
+                <Text className="mt-4 text-gray-500 text-center">
+                  You don't have any notifications
+                </Text>
+              </View>
+            )}
+          </View>
+        </View>
+      </Modal>
 
       {/* Create Trip Modal */}
       <Modal
@@ -1321,20 +1806,22 @@ const DriverReserveBooking = () => {
 
                   {/* Action buttons based on trip status */}
                   <View className="flex-row justify-between mb-3">
-                    {selectedTrip.status === "scheduled" && (
-                      <TouchableOpacity
-                        className="flex-1 bg-blue-500 py-3 rounded-lg mr-2"
-                        onPress={() => loadTripForEdit(selectedTrip)}
-                      >
-                        <Text className="text-center text-white font-medium">
-                          Edit Trip
-                        </Text>
-                      </TouchableOpacity>
-                    )}
+                    {selectedTrip.status === "scheduled" &&
+                      selectedTrip.bookedSeats.length === 0 && (
+                        <TouchableOpacity
+                          className="flex-1 bg-blue-500 py-3 rounded-lg mr-2"
+                          onPress={() => loadTripForEdit(selectedTrip)}
+                        >
+                          <Text className="text-center text-white font-medium">
+                            Edit Trip
+                          </Text>
+                        </TouchableOpacity>
+                      )}
 
                     {(selectedTrip.status === "completed" ||
                       selectedTrip.status === "cancelled" ||
-                      selectedTrip.status === "scheduled") && (
+                      (selectedTrip.status === "scheduled" &&
+                        selectedTrip.bookedSeats.length === 0)) && (
                       <TouchableOpacity
                         className="flex-1 bg-red-500 py-3 rounded-lg ml-2"
                         onPress={() => setShowDeleteConfirm(true)}

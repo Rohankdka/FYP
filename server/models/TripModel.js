@@ -16,14 +16,8 @@ const tripSchema = new mongoose.Schema(
       required: true,
     },
     departureDate: {
-      type: Date,
+      type: String,
       required: true,
-      validate: {
-        validator: function (value) {
-          return value > new Date(); // Ensure departureDate is in the future
-        },
-        message: "Departure date must be in the future",
-      },
     },
     departureTime: {
       type: String,
@@ -32,12 +26,15 @@ const tripSchema = new mongoose.Schema(
     price: {
       type: Number,
       required: true,
-      min: 0, // Ensure price is non-negative
     },
     availableSeats: {
       type: Number,
       required: true,
-      min: 1, // Ensure at least 1 seat is available
+    },
+    bookedSeats: {
+      type: [mongoose.Schema.Types.ObjectId],
+      ref: "Nepride",
+      default: [],
     },
     status: {
       type: String,
@@ -46,6 +43,7 @@ const tripSchema = new mongoose.Schema(
     },
     description: {
       type: String,
+      default: "",
     },
     vehicleDetails: {
       model: {
@@ -72,44 +70,23 @@ const tripSchema = new mongoose.Schema(
       },
       music: {
         type: Boolean,
-        default: false,
+        default: true,
       },
     },
-    bookedSeats: [
-      {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "Nepride",
-      },
-    ],
+    paymentMethod: {
+      type: String,
+      enum: ["cash", "wallet", "card"],
+      default: "cash",
+    },
+    paymentStatus: {
+      type: String,
+      enum: ["pending", "completed"],
+      default: "pending",
+    },
   },
   { timestamps: true }
 );
 
-// Create a virtual property to check seats availability
-tripSchema.virtual("seatsAvailable").get(function () {
-  return this.availableSeats - this.bookedSeats.length;
-});
-
-// Prevent booking more seats than available
-tripSchema.pre("save", function (next) {
-  if (this.bookedSeats.length > this.availableSeats) {
-    const error = new Error("Cannot book more seats than available");
-    return next(error);
-  }
-
-  // Check for duplicate bookings
-  const uniqueBookings = [
-    ...new Set(this.bookedSeats.map((id) => id.toString())),
-  ];
-  if (uniqueBookings.length !== this.bookedSeats.length) {
-    const error = new Error("Duplicate booking detected");
-    return next(error);
-  }
-
-  next();
-});
-
-// Define the Trip model using the schema
 const Trip = mongoose.model("Trip", tripSchema);
 
 export default Trip;

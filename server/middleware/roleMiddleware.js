@@ -15,11 +15,17 @@ const authorizeRole = (roles) => {
     }
 
     // If using driverId or passengerId parameter, check if the user is accessing their own data
-    if (req.params.driverId && req.user._id === req.params.driverId) {
+    if (
+      req.params.driverId &&
+      req.user._id.toString() === req.params.driverId
+    ) {
       return next();
     }
 
-    if (req.params.passengerId && req.user._id === req.params.passengerId) {
+    if (
+      req.params.passengerId &&
+      req.user._id.toString() === req.params.passengerId
+    ) {
       return next();
     }
 
@@ -30,6 +36,11 @@ const authorizeRole = (roles) => {
 
     // Special case for trip cancellation - allow passengers to cancel their bookings
     if (req.path.includes("/cancel/") && req.user.role === "passenger") {
+      return next();
+    }
+
+    // Special case for trip notifications - allow drivers to send notifications
+    if (req.path.includes("/notify") && req.user.role === "driver") {
       return next();
     }
 

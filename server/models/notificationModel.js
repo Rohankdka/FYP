@@ -1,4 +1,4 @@
-import mongoose from "mongoose"
+import mongoose from "mongoose";
 
 const notificationSchema = new mongoose.Schema(
   {
@@ -25,6 +25,12 @@ const notificationSchema = new mongoose.Schema(
         "booking_cancelled",
         "trip_completed",
         "payment_received",
+        "ride_request",
+        "ride_accepted",
+        "ride_started",
+        "ride_completed",
+        "ride_canceled",
+        "payment_completed",
       ],
       required: true,
     },
@@ -37,10 +43,9 @@ const notificationSchema = new mongoose.Schema(
       default: false,
     },
   },
-  { timestamps: true },
-)
+  { timestamps: true }
+);
 
-const Notification = mongoose.model("Notification", notificationSchema)
+const Notification = mongoose.model("Notification", notificationSchema);
 
-export default Notification
-
+export default Notification;
