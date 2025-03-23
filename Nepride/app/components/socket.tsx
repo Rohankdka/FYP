@@ -7,7 +7,7 @@ let socketInstance: any = null;
 const getSocket = () => {
   if (!socketInstance) {
     // Use different IP address format based on platform
-    const SERVER_URL = "http://192.168.1.70:3001";
+    const SERVER_URL = "http://192.168.46.143:3001";
 
     socketInstance = io(SERVER_URL, {
       reconnection: true,

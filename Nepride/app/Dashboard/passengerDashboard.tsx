@@ -23,7 +23,7 @@ import NotificationBadge from "../components/notification-badge"
 import NotificationPanel from "../components/notification-panel"
 import PaymentModal from "../components/payment-modal"
 
-const API_URL = "http://192.168.1.70:3001"
+const API_URL = "http://192.168.46.143:3001"
 const GOOGLE_MAPS_API_KEY = "AIzaSyAfVD-fFk1aa4yy4YFesrLIXhxwNHhQtxU"
 
 interface Coordinates {

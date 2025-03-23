@@ -22,7 +22,7 @@ import { MaterialIcons } from "@expo/vector-icons";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import getSocket from "../components/socket";
 
-const API_URL = "http://192.168.1.70:3001";
+const API_URL = "http://192.168.46.143:3001";
 
 interface Trip {
   _id: string;
