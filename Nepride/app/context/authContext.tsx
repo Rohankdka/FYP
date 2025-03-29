@@ -50,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Fetch user details using token
   const fetchUser = async (token: string) => {
     try {
-      const response = await axios.get("http://192.168.46.143:3001/auth/me", {
+      const response = await axios.get("http://192.168.1.70:3001/auth/me", {
         headers: { Authorization: `Bearer ${token}` },
       });
       console.log("Fetched user details:", response.data); // Debug log
@@ -64,7 +64,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({
   // Handle login
   const login = async (email: string, password: string) => {
     try {
-      const response = await axios.post("http://192.168.46.143:3001/auth/login", {
+      const response = await axios.post("http://192.168.1.70:3001/auth/login", {
         email,
         password,
       });

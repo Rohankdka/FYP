@@ -30,7 +30,7 @@ interface NotificationPanelProps {
   onClose: () => void;
 }
 
-const API_URL = "http://192.168.46.143:3001";
+const API_URL = "http://192.168.1.70:3001";
 
 const NotificationPanel: React.FC<NotificationPanelProps> = ({
   userId,

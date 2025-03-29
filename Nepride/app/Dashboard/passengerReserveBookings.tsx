@@ -20,7 +20,7 @@ import getSocket from "../components/socket"
 import NotificationBadge from "../components/notification-badge"
 import NotificationPanel from "../components/notification-panel"
 
-const API_URL = "http://192.168.46.143:3001"
+const API_URL = "http://192.168.1.70:3001"
 
 interface Trip {
   _id: string

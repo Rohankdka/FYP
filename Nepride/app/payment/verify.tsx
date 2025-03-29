@@ -1,133 +1,112 @@
-"use client"
+"use client";
 
-import { useEffect, useState } from "react"
-import { View, Text, ActivityIndicator, TouchableOpacity } from "react-native"
-import { useLocalSearchParams, useRouter } from "expo-router"
-import axios from "axios"
-import { Ionicons } from "@expo/vector-icons"
+import { useState } from "react";
+import { TouchableOpacity, Text, ActivityIndicator, Alert } from "react-native";
+import * as WebBrowser from "expo-web-browser";
+import { useRouter } from "expo-router";
+import axios from "axios";
+import { MaterialIcons } from "@expo/vector-icons";
 
-const API_URL = "http://192.168.1.70:3001"
-
-const PaymentVerificationScreen = () => {
-  const { pidx, payment_id, rideId, passengerId } = useLocalSearchParams<{
-    pidx: string
-    payment_id: string
-    rideId: string
-    passengerId: string
-  }>()
-
-  const router = useRouter()
-  const [verifying, setVerifying] = useState(true)
-  const [success, setSuccess] = useState(false)
-  const [error, setError] = useState<string | null>(null)
-  const [paymentData, setPaymentData] = useState<any>(null)
-
-  useEffect(() => {
-    if (!pidx) {
-      setError("Missing payment information")
-      setVerifying(false)
-      return
-    }
-
-    const verifyPayment = async () => {
-      try {
-        console.log("Verifying payment with pidx:", pidx)
-        const response = await axios.get(`${API_URL}/payments/verify?pidx=${pidx}`)
-
-        console.log("Payment verification response:", response.data)
-
-        if (response.data.success) {
-          setSuccess(true)
-          setPaymentData(response.data.data)
-
-          // Notify the server about the successful payment
-          if (rideId && passengerId) {
-            try {
-              // Emit socket event for payment completion
-              const socket = (window as any).socket
-              if (socket) {
-                socket.emit("payment-completed", {
-                  rideId,
-                  paymentMethod: "khalti",
-                  passengerId,
-                  fare: paymentData?.total_amount / 100, // Convert from paisa to NPR
-                })
-              }
-            } catch (socketError) {
-              console.error("Error emitting socket event:", socketError)
-            }
-          }
-        } else {
-          setSuccess(false)
-          setError("Payment verification failed")
-        }
-      } catch (err) {
-        console.error("Error verifying payment:", err)
-        setSuccess(false)
-        setError("Failed to verify payment. Please contact support.")
-      } finally {
-        setVerifying(false)
-      }
-    }
-
-    verifyPayment()
-  }, [pidx, rideId, passengerId, paymentData])
-
-  const handleGoBack = () => {
-    // Navigate back to the dashboard
-    router.push({
-      pathname: "/Dashboard/passengerDashboard",
-      params: { passengerId },
-    })
-  }
-
-  return (
-    <View className="flex-1 bg-white p-6 justify-center items-center">
-      <View className="w-full max-w-md bg-white rounded-xl p-6 shadow-md">
-        <Text className="text-2xl font-bold text-center mb-6">Payment Verification</Text>
-
-        {verifying ? (
-          <View className="items-center py-8">
-            <ActivityIndicator size="large" color="#4285F4" />
-            <Text className="mt-4 text-gray-600 text-center">Verifying your payment...</Text>
-          </View>
-        ) : success ? (
-          <View className="items-center py-4">
-            <View className="bg-green-100 p-4 rounded-full mb-4">
-              <Ionicons name="checkmark-circle" size={64} color="green" />
-            </View>
-            <Text className="text-xl font-bold text-green-600 mb-2">Payment Successful!</Text>
-            <Text className="text-gray-600 text-center mb-4">Your payment has been successfully processed.</Text>
-            {paymentData && (
-              <View className="bg-gray-50 p-4 rounded-lg w-full mb-4">
-                <Text className="font-medium">Transaction Details:</Text>
-                <Text className="text-gray-600">Amount: NPR {paymentData.total_amount / 100}</Text>
-                <Text className="text-gray-600">Transaction ID: {paymentData.transaction_id}</Text>
-                <Text className="text-gray-600">Status: {paymentData.status}</Text>
-              </View>
-            )}
-            <TouchableOpacity className="bg-blue-500 py-3 px-6 rounded-lg w-full" onPress={handleGoBack}>
-              <Text className="text-white font-bold text-center">Return to Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        ) : (
-          <View className="items-center py-4">
-            <View className="bg-red-100 p-4 rounded-full mb-4">
-              <Ionicons name="close-circle" size={64} color="red" />
-            </View>
-            <Text className="text-xl font-bold text-red-600 mb-2">Payment Failed</Text>
-            <Text className="text-gray-600 text-center mb-4">
-              {error || "There was an issue processing your payment."}
-            </Text>
-            <TouchableOpacity className="bg-blue-500 py-3 px-6 rounded-lg w-full" onPress={handleGoBack}>
-              <Text className="text-white font-bold text-center">Return to Dashboard</Text>
-            </TouchableOpacity>
-          </View>
-        )}
-      </View>
-    </View>
-  )
+interface KhaltiButtonProps {
+  rideId: string;
+  passengerId: string;
+  amount: number;
+  onSuccess?: () => void;
+  onFailure?: (error: string) => void;
 }
 
-export default PaymentVerificationScreen
+const API_URL = "http://192.168.1.70:3001";
 
+const KhaltiButton = ({
+  rideId,
+  passengerId,
+  amount,
+  onSuccess,
+  onFailure,
+}: KhaltiButtonProps) => {
+  const [loading, setLoading] = useState(false);
+  const router = useRouter();
+
+  const handlePayment = async () => {
+    if (!rideId) {
+      Alert.alert("Cannot process payment", "Missing ride information");
+      if (onFailure) onFailure("Missing ride ID");
+      return;
+    }
+
+    setLoading(true);
+    try {
+      // Initialize payment
+      const initResponse = await axios.post(`${API_URL}/payments/initialize`, {
+        rideId,
+        amount,
+        passengerId,
+      });
+
+      if (!initResponse.data?.payment_url) {
+        throw new Error("No payment URL received");
+      }
+
+      // Open payment page
+      const result = await WebBrowser.openAuthSessionAsync(
+        initResponse.data.payment_url,
+        "nepride://payment/verify"
+      );
+
+      if (result.type === "success") {
+        const url = new URL(result.url);
+        const pidx = url.searchParams.get("pidx");
+
+        if (pidx) {
+          // Verify payment - using exact URL format from your API
+          const verifyResponse = await axios.get(
+            `${API_URL}/payments/verify?pidx=${pidx}`
+          );
+
+          if (verifyResponse.data?.success) {
+            if (onSuccess) onSuccess();
+            router.push("/payment/success");
+          } else {
+            throw new Error(
+              verifyResponse.data?.message || "Verification failed"
+            );
+          }
+        }
+      } else {
+        throw new Error("Payment was cancelled");
+      }
+    } catch (error) {
+      console.error("Payment error:", error);
+      Alert.alert(
+        "Payment Error",
+        error instanceof Error ? error.message : "Payment failed"
+      );
+      if (onFailure) onFailure("Payment failed");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <TouchableOpacity
+      className="bg-purple-600 py-3 rounded-lg flex-row justify-center items-center"
+      onPress={handlePayment}
+      disabled={loading}
+    >
+      {loading ? (
+        <ActivityIndicator size="small" color="white" />
+      ) : (
+        <>
+          <MaterialIcons
+            name="account-balance-wallet"
+            size={20}
+            color="white"
+          />
+          <Text className="ml-2 text-white font-bold">Pay with Khalti</Text>
+        </>
+      )}
+    </TouchableOpacity>
+  );
+};
+
+export default KhaltiButton;

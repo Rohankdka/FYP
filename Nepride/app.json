@@ -5,7 +5,7 @@
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
-    "scheme": "myapp",
+    "scheme": "nepride",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "ios": {
@@ -14,8 +14,17 @@
         "NSPhotoLibraryUsageDescription": "We need access to your photo library to upload images.",
         "NSCameraUsageDescription": "We need access to your camera to take photos.",
         "NSLocationWhenInUseUsageDescription": "We need your location to find rides near you.",
-        "NSLocationAlwaysUsageDescription": "We need your location to track rides."
-      }
+        "NSLocationAlwaysUsageDescription": "We need your location to track rides.",
+        "CFBundleURLTypes": [
+          {
+            "CFBundleURLSchemes": ["nepride"],
+            "CFBundleURLName": "com.nepride.app"
+          }
+        ],
+        "LSApplicationQueriesSchemes": ["nepride", "khalti"]
+      },
+      "bundleIdentifier": "com.nepride.app",
+      "associatedDomains": ["applinks:nepride.com"]
     },
     "android": {
       "adaptiveIcon": {
@@ -33,7 +42,25 @@
         "googleMaps": {
           "apiKey": "AIzaSyAfVD-fFk1aa4yy4YFesrLIXhxwNHhQtxU"
         }
-      }
+      },
+      "package": "com.nepride.app",
+      "intentFilters": [
+        {
+          "action": "VIEW",
+          "autoVerify": true,
+          "data": [
+            {
+              "scheme": "nepride"
+            },
+            {
+              "scheme": "https",
+              "host": "nepride.com",
+              "pathPrefix": "/payment"
+            }
+          ],
+          "category": ["BROWSABLE", "DEFAULT"]
+        }
+      ]
     },
     "web": {
       "bundler": "metro",
@@ -70,3 +97,4 @@
     }
   }
 }
+

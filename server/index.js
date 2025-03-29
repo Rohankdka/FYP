@@ -690,45 +690,45 @@ io.on("connection", (socket) => {
   // Modify the payment-completed event handler to ensure both passenger and driver dashboards are reset
   socket.on("payment-completed", async (data) => {
     try {
-      console.log(`Payment completed: ${JSON.stringify(data)}`);
-
+      console.log(`Payment completed: ${JSON.stringify(data)}`)
+  
       // Handle null or undefined rideId
       if (!data.rideId) {
-        console.error("No ride ID provided for payment completion");
-        return;
+        console.error("No ride ID provided for payment completion")
+        return
       }
-
-      const { rideId, paymentMethod, passengerId, fare } = data;
-      const ride = await Ride.findById(rideId);
+  
+      const { rideId, paymentMethod, passengerId, fare } = data
+      const ride = await Ride.findById(rideId)
       if (!ride) {
-        console.error(`Ride not found: ${rideId}`);
-        return;
+        console.error(`Ride not found: ${rideId}`)
+        return
       }
-
+  
       // Update ride payment status in database
-      ride.paymentStatus = "completed";
-      ride.paymentMethod = paymentMethod || ride.paymentMethod || "cash";
-      await ride.save();
-      console.log(`Updated ride ${ride._id} payment status to completed`);
-
+      ride.paymentStatus = "completed"
+      ride.paymentMethod = paymentMethod || ride.paymentMethod || "cash"
+      await ride.save()
+      console.log(`Updated ride ${ride._id} payment status to completed`)
+  
       // Ensure passengerId and driverId are strings
       const passengerIdStr =
         typeof (ride.passengerId || passengerId) === "object"
           ? (ride.passengerId || passengerId)._id
             ? (ride.passengerId || passengerId)._id.toString()
             : String(ride.passengerId || passengerId)
-          : String(ride.passengerId || passengerId);
-
+          : String(ride.passengerId || passengerId)
+  
       const driverIdStr =
         typeof ride.driverId === "object"
           ? ride.driverId._id
             ? ride.driverId._id.toString()
             : String(ride.driverId)
-          : String(ride.driverId);
-
+          : String(ride.driverId)
+  
       // Get passenger details for notification
-      const passenger = await NeprideModel.findById(passengerIdStr);
-
+      const passenger = await NeprideModel.findById(passengerIdStr)
+  
       // Create a notification for the driver
       const driverNotification = await createAndEmitNotification(
         driverIdStr,
@@ -737,22 +737,22 @@ io.on("connection", (socket) => {
           passenger ? passenger.username : "passenger"
         } via ${ride.paymentMethod}.`,
         "payment_received",
-        ride._id
-      );
-
-      console.log("Driver notification created:", driverNotification);
-
+        ride._id,
+      )
+  
+      console.log("Driver notification created:", driverNotification)
+  
       // Create a notification for the passenger
       const passengerNotification = await createAndEmitNotification(
         passengerIdStr,
         "Payment Completed",
         `Your payment of NPR ${ride.fare} for the ride has been processed successfully.`,
         "payment_completed",
-        ride._id
-      );
-
-      console.log("Passenger notification created:", passengerNotification);
-
+        ride._id,
+      )
+  
+      console.log("Passenger notification created:", passengerNotification)
+  
       // Make sure to emit to the correct driver room
       io.to(`driver-${driverIdStr}`).emit("payment-received", {
         rideId: ride._id,
@@ -760,9 +760,9 @@ io.on("connection", (socket) => {
         paymentStatus: "completed",
         paymentMethod: ride.paymentMethod,
         resetDashboard: true, // Add flag to indicate dashboard should be reset
-      });
-      console.log(`Emitted payment-received to driver-${driverIdStr}`);
-
+      })
+      console.log(`Emitted payment-received to driver-${driverIdStr}`)
+  
       // Also emit to the driver's user room to ensure notification is received
       io.to(`user-${driverIdStr}`).emit("payment-received", {
         rideId: ride._id,
@@ -770,34 +770,34 @@ io.on("connection", (socket) => {
         paymentStatus: "completed",
         paymentMethod: ride.paymentMethod,
         resetDashboard: true, // Add flag to indicate dashboard should be reset
-      });
-
+      })
+  
       // Emit a ride status update to ensure UI is refreshed
       io.to(`driver-${driverIdStr}`).emit("ride-status", {
         rideId: ride._id,
         status: "completed",
         paymentStatus: "completed",
-      });
-
+      })
+  
       // Send confirmation to passenger
       io.to(`passenger-${passengerIdStr}`).emit("payment-confirmation", {
         rideId: ride._id,
         status: "completed",
         message: `Your payment of NPR ${ride.fare} via ${ride.paymentMethod} has been confirmed.`,
         resetDashboard: true, // Add flag to indicate dashboard should be reset
-      });
-
+      })
+  
       // Also emit to passenger's user room
       io.to(`user-${passengerIdStr}`).emit("payment-confirmation", {
         rideId: ride._id,
         status: "completed",
         message: `Your payment of NPR ${ride.fare} via ${ride.paymentMethod} has been confirmed.`,
         resetDashboard: true, // Add flag to indicate dashboard should be reset
-      });
+      })
     } catch (error) {
-      console.error("Error processing payment:", error);
+      console.error("Error processing payment:", error)
     }
-  });
+  })
 
   socket.on("get-ride-history", async (data) => {
     try {
